@@ -7,14 +7,16 @@ if(FileName == 0)
     return;
 end
 datfile = strcat(PathName, FileName);
-seg2ascii = 'D:\Documents\PhD\Montmagny\data\seg2asci.exe ';
+cd(PathName);
+seg2ascii = 'D:\Projects\seg2asci.exe ';
 filter_cutoff = 15;
+co = 5; %channel offset
+cc = 3; %channel count
 
 system([seg2ascii, datfile, ' 16K'],'-echo');
 
 data = [];
-out_files = dir(['D:\Documents\PhD\Montmagny\data\','*.0*']);
-Nch = length(out_files);
+out_files = dir([PathName,'*.0*']);
 for ch_file = out_files'
     if(~exist('Ts','var'))
         Ts = dlmread(ch_file.name, '' , 'B30..B30');
@@ -24,6 +26,8 @@ for ch_file = out_files'
     data = [data, ch_data]; %#ok<AGROW>
     delete(ch_file.name);
 end
+data = data(:,co+1:co+cc);
+Nch = size(data,2);
 N = 2^nextpow2(length(data));
 [fnum, fden] = butter(10, filter_cutoff*2/Fs, 'low');
 fdata = filtfilt(fnum, fden, data);
@@ -41,8 +45,7 @@ f = Fs*(1:N/2)'/N;
 subplot(3,1,2);
 plot(f,abs(fft_data))
 subplot(3,1,3);
-HVSR = [sqrt(abs(fft_data(:,2)).^2 + abs(fft_data(:,3)).^2) ./ abs(fft_data(:,1)), ...
-    sqrt(abs(fft_data(:,5)).^2 + abs(fft_data(:,6)).^2) ./ abs(fft_data(:,4))];
+HVSR = sqrt(abs(fft_data(:,2:3:end)).^2 + abs(fft_data(:,3:3:end)).^2) ./ abs(fft_data(:,1:3:end));
 D = [t' data];
 mat_file = [PathName FileName(1:end-4) '.mat'];
 csv_file = [PathName FileName(1:end-4) '.csv'];
