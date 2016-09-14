@@ -24,23 +24,23 @@ function SetupFigures(data_length, name)
 
     ftsx = subplot('Position',[0.02 0.87 0.32 0.10]); 
     axis([0 data_length/Fs -11 11]); 
-    title('X');hold on; ftsx.Tag = 'Xf';
+    title(channels{1}(1));hold on; ftsx.Tag = 'Xf';
     ftsy = subplot('Position',[0.35 0.87 0.32 0.10]); 
     axis([0 data_length/Fs -11 11]); ftsy.YAxis.Visible = 'off'; 
-    title('Z');hold on; ftsy.Tag = 'Yf';
+    title(channels{2}(1));hold on; ftsy.Tag = 'Yf';
     ftsz = subplot('Position',[0.68 0.87 0.32 0.10]); 
     axis([0 data_length/Fs -11 11]); ftsz.YAxis.Visible = 'off'; 
-    title('Y');hold on; ftsz.Tag = 'Zf';
+    title(channels{3}(1));hold on; ftsz.Tag = 'Zf';
 
     psdx = subplot('Position',[0.02 0.025 0.32 0.30]);
     hold on; psdx.YScale = 'log'; psdx.XScale = 'log'; 
-    psdx.XLim = [1 100];psdx.YLim = [-1*10^2 1.1];
+    psdx.XLim = [1 Fs/2];psdx.YLim = [-1*10^2 10];
     psdy = subplot('Position',[0.35 0.025 0.32 0.30]); 
     hold on; psdy.YScale = 'log'; psdy.XScale = 'log';
-    psdy.XLim = [1 100];psdy.YLim = [-1*10^2 1.1];
+    psdy.XLim = [1 Fs/2];psdy.YLim = [-1*10^2 10];
     psdz = subplot('Position',[0.68 0.025 0.32 0.30]); 
     hold on; psdz.YScale = 'log'; psdz.XScale = 'log';
-    psdz.XLim = [1 100];psdz.YLim = [-1*10^2 1.1];
+    psdz.XLim = [1 Fs/2];psdz.YLim = [-1*10^2 10];
     
     ftsx.UserData = tsx; ftsy.UserData = tsy; ftsz.UserData = tsz;
     tsx.UserData = ftsx; tsy.UserData = ftsy; tsz.UserData = ftsz;    
@@ -143,6 +143,7 @@ function post_pan(~, evd)
     values = evd.Axes.XLim;
     try 
         for i=1:1:length(fig_FullTS)
+            fig_tseries(i).XLim = values;
             lines = [   plot(fig_FullTS(i), [values(1), values(1)], fig_FullTS(i).YLim, 'k')
                         plot(fig_FullTS(i), [values(2), values(2)], fig_FullTS(i).YLim, 'k')];
             if isempty(win_lines)

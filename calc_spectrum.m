@@ -12,13 +12,13 @@ function calc_spectrum(idc)
     
     limit = int32(fig_tseries(idc).XLim*Fs);
     tmp = range(limit);
-    data = zeros([tmp, 5]);
+    data = zeros([tmp, Nch]);
     for k=1:1:Nch
-        child = fig_tseries(idc).Children(Nch-k+1);
+        child = fig_tseries(idc).Children(k);
         tmp = child.YData(limit(1)+1:limit(2));
         data(:,k) = tmp;
     end
-    fft_data2 = fft(data.*repmat(ones(Ns,1),1,5), Ns, 1)/Ns;
+    fft_data2 = fft(data.*repmat(ones(Ns,1),1,Nch), Ns, 1)/Ns;
     fft_data_theta = angle(fft_data2);
     fft_data_ampli = abs(fft_data2);
     fft_data = fft_data_ampli(1:Ns/2,:);
@@ -32,7 +32,7 @@ function calc_spectrum(idc)
     mod_data = data;
     mod_fft = fft_data;
     for k=1:1:Nch
-        if(isempty(regexp(fig_tseries(idc).Children(Nch-k+1).DisplayName,'[A-Z]','ONCE')))
+        if(isempty(regexp(fig_tseries(idc).Children(k).DisplayName,'[A-Z]','ONCE')))
 %             [a, b] = pol2cart(fft_data_theta(:,k), mod_fft(:,k));
             mod_fft(:,k) = fft_data(:,k)./fresp;
             a = 1;%sum(fft_data(:,k-1))/sum(mod_fft(:,k));
@@ -47,7 +47,7 @@ function calc_spectrum(idc)
         end
     end
 
-    h = plot(fig, repmat(f, 1, 5), fft_data);
+    h = plot(fig, repmat(f, 1, Nch), fft_data);
     figure(figs2(1));clf;
     loglog(f, fft_data, '-');hold on;
     loglog(f, mod_fft,'--');
@@ -64,7 +64,7 @@ function calc_spectrum(idc)
     delete(h_old(:,idc));
     h_old(:,idc) = h;
     for k=1:1:Nch
-        child = fig_tseries(idc).Children(Nch-k+1);
+        child = fig_tseries(idc).Children(k);
         h(k).Color = child.Color;
         h(k).DisplayName = child.DisplayName;
         if(strcmpi(child.Visible, 'on'))

@@ -79,30 +79,28 @@ function checkbox_callback(cid, toggle)
     global fig_FullTS;
     global fig_spectrum;
     global channel_enabled;
-    if(isempty(channel_enabled))
-        channel_enabled = ones(5, 1);
-    end
+    nch = length(channel_enabled);
     channel_enabled(cid) = toggle;
-    for i=1:1:5
+    for i=1:1:nch
         vis = 'off';
         if(channel_enabled(i)) 
             vis = 'on'; 
         end
         for j=1:1:3
             childs = fig_tseries(j).Children;
-            nch = length(childs)+1;
+            if(length(childs)<i)
+                continue;
+            end
             if(~isempty(childs))
-                childs(nch-i).Visible = vis;
+                childs(i).Visible = vis;
             end
             childs = fig_FullTS(j).Children;
-            nch = length(childs)+1;
             if(~isempty(childs))
-                childs(nch-i).Visible = vis;
+                childs(i).Visible = vis;
             end
             childs = fig_spectrum(j).Children;
-            nch = length(childs)+1;
             if(~isempty(childs))
-                childs(nch-i).Visible = vis;
+                childs(nch-i+1).Visible = vis;
             end
         end
     end
@@ -193,8 +191,8 @@ end
 function set_colors(obj, id)
     global fig_tseries;
     obj.Value = 1;
-    obj.BackgroundColor = fig_tseries(2).Children(6-id).Color;
-    obj.String = fig_tseries(2).Children(6-id).DisplayName(1:end-1);
+    obj.BackgroundColor = fig_tseries(2).Children(id).Color;
+    obj.String = fig_tseries(2).Children(id).DisplayName;
 end
 
 % --- Executes during object creation, after setting all properties.
@@ -202,7 +200,7 @@ function checkbox5_CreateFcn(hObject, eventdata, handles)
 % hObject    handle to checkbox5 (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    empty - handles not created until after all CreateFcns called
-set_colors(hObject, 5);
+% set_colors(hObject, 5);
 end
 
 
@@ -211,7 +209,7 @@ function checkbox4_CreateFcn(hObject, eventdata, handles)
 % hObject    handle to checkbox4 (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    empty - handles not created until after all CreateFcns called
-set_colors(hObject, 4);
+% set_colors(hObject, 4);
 end
 
 
@@ -220,7 +218,7 @@ function checkbox3_CreateFcn(hObject, eventdata, handles)
 % hObject    handle to checkbox3 (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    empty - handles not created until after all CreateFcns called
-set_colors(hObject, 3);
+% set_colors(hObject, 3);
 end
 
 
