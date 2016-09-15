@@ -96,7 +96,7 @@ function checkbox_callback(cid, toggle)
             end
             childs = fig_FullTS(j).Children;
             if(~isempty(childs))
-                childs(i).Visible = vis;
+                childs(i+2).Visible = vis;
             end
             childs = fig_spectrum(j).Children;
             if(~isempty(childs))
