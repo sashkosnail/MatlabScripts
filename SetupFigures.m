@@ -1,4 +1,4 @@
-function SetupFigures(data_length, name)
+function SetupFigures(data_length, name, redraw)
     global Ns;
     global Nch;
     global Fs;
@@ -9,47 +9,52 @@ function SetupFigures(data_length, name)
     global figs2;
     global channels;
     
+    if(exist('redraw','var'))
+        ev.Axes = redraw;
+        post_pan(0, ev);
+        return;
+    end
+    
     figure('Name', name, 'Units','normalized', 'MenuBar', 'none', ...
         'ToolBar', 'figure', 'OuterPosition',[0.5, 0.5, 0.5, 0.5]);
     
     tsx = subplot('Position',[0.02 0.35 0.32 0.5]); 
-    axis([0 Ns/Fs -11 11]); axis autoy ; grid on
+    tsx.XLim = [0 Ns/Fs]; axis autoy ; grid on
     hold on; tsx.Tag = 'X';
     tsy = subplot('Position',[0.35 0.35 0.32 0.5]); 
-    axis([0 Ns/Fs -11 11]); %tsy.YAxis.Visible = 'off'; 
+    tsy.XLim = [0 Ns/Fs]; tsy.YAxis.Visible = 'off'; 
     hold on; tsy.Tag = 'Y'; axis autoy; grid on
     tsz = subplot('Position',[0.68 0.35 0.32 0.5]); 
-    axis([0 Ns/Fs -11 11]); %tsz.YAxis.Visible = 'off'; 
+    tsz.XLim = [0 Ns/Fs]; tsz.YAxis.Visible = 'off'; 
     hold on; tsz.Tag = 'Z'; axis autoy; grid on
 
     ftsx = subplot('Position',[0.02 0.87 0.32 0.10]); 
-    axis([0 data_length/Fs -11 11]); 
+    axis([0 data_length/Fs -1 1]); axis autoy
     title(channels{1}(1));hold on; ftsx.Tag = 'Xf';
     ftsy = subplot('Position',[0.35 0.87 0.32 0.10]); 
-    axis([0 data_length/Fs -11 11]); ftsy.YAxis.Visible = 'off'; 
+    axis([0 data_length/Fs -1 1]);  axis autoy
+    ftsy.YAxis.Visible = 'off'; 
     title(channels{2}(1));hold on; ftsy.Tag = 'Yf';
     ftsz = subplot('Position',[0.68 0.87 0.32 0.10]); 
-    axis([0 data_length/Fs -11 11]); ftsz.YAxis.Visible = 'off'; 
+    axis([0 data_length/Fs -1 1]); axis autoy
+    ftsz.YAxis.Visible = 'off'; 
     title(channels{3}(1));hold on; ftsz.Tag = 'Zf';
 
     psdx = subplot('Position',[0.02 0.025 0.32 0.30]);
     hold on; psdx.YScale = 'log'; psdx.XScale = 'log'; 
-    psdx.XLim = [4.5 Fs/2];psdx.YLim = [.1E-6 0.01];; grid on 
+    psdx.XLim = [4.5 Fs/2];psdx.YLim = [.1E-6 0.01]; grid on 
 %     axis autoy
     psdy = subplot('Position',[0.35 0.025 0.32 0.30]); 
     hold on; psdy.YScale = 'log'; psdy.XScale = 'log';
-    psdy.XLim = [4.5 Fs/2];psdy.YLim = [.1E-6 0.01]; ; grid on
+    psdy.XLim = [4.5 Fs/2];psdy.YLim = [.1E-6 0.01]; grid on
 %     axis autoy
     psdz = subplot('Position',[0.68 0.025 0.32 0.30]); 
     hold on; psdz.YScale = 'log'; psdz.XScale = 'log';
-    psdz.XLim = [4.5 Fs/2];psdz.YLim = [.1E-6 0.01]; ; grid on
+    psdz.XLim = [4.5 Fs/2];psdz.YLim = [.1E-6 0.01]; grid on
 %     axis autoy
     
     ftsx.UserData = tsx; ftsy.UserData = tsy; ftsz.UserData = tsz;
     tsx.UserData = ftsx; tsy.UserData = ftsy; tsz.UserData = ftsz;    
-    ftsx.ButtonDownFcn = @click_fts;
-    ftsy.ButtonDownFcn = @click_fts;
-    ftsz.ButtonDownFcn = @click_fts;
     
     z = zoom; z.Motion = 'vertical';
     z.ButtonDownFilter = @zoom_button_down;
@@ -58,6 +63,10 @@ function SetupFigures(data_length, name)
     h.ActionPostCallback = @post_pan;
     h.ActionPreCallback = @pre_pan;
     h.Enable = 'on';
+    
+    ftsx.ButtonDownFcn = @click_fts;
+    ftsy.ButtonDownFcn = @click_fts;
+    ftsz.ButtonDownFcn = @click_fts;
     
     L = length(channels) - sum(strcmp(channels, 'xxx'));
     clear fig_chans;
@@ -103,31 +112,25 @@ function click_fts(obj, ~)
     global win_lines;
     global Ns;
     global Fs
-%     ts = obj.UserData;
-% %     if obj.Parent.CurrentState.Blocking
-% %         return
-% %     end
-%     click_point = ginput(1);
-%     cp = click_point(1);
-%     switch obj.Tag(1)
-%         case 'X'
-%             id = 1;
-%         case 'Y'
-%             id = 2;
-%         otherwise
-%             id = 3;
+    global fig_tseries;
+    global fig_FullTS;
+%     if obj.Parent.CurrentState.Blocking
+%         return
 %     end
-%     ts.XLim = [(cp - 1/2 * Ns/Fs), (cp + 1/2 * Ns/Fs)];
-%     lines = [   plot(obj, (cp - 1/2 * Ns)./[Fs Fs], obj.YLim, 'k')
-%                 plot(obj, (cp + 1/2 * Ns).*[Fs Fs], obj.YLim, 'k')];
-%     if isempty(win_lines)
-%       win_lines=repmat(lines',3,1);
-%     end
-%     delete(win_lines(id,:));
-%     win_lines(id,:) = lines;
-%     h=pan(gcf);
-%     h.Enable = 'on';
-%     h.ButtonDownFilter = @button_down;
+    click_point = ginput(1);
+    cp = click_point(1);
+    for id=1:1:3
+        fig_tseries(id).XLim = [(cp - 1/2 * Ns/Fs), (cp + 1/2 * Ns/Fs)];
+        lines = [   plot(fig_FullTS(id), (cp - 1/2 * Ns/Fs)*[1 1], fig_FullTS(id).YLim, 'k')
+                    plot(fig_FullTS(id), (cp + 1/2 * Ns/Fs)*[1 1], fig_FullTS(id).YLim, 'k')];
+        if isempty(win_lines)
+          win_lines=repmat(lines',3,1);
+        end
+        delete(win_lines(id,:));
+        win_lines(id,:) = lines;
+        h=pan(gcf);
+        h.Enable = 'on';
+    end
 end
 function pre_pan(~, ~)
     global fig_tseries;
@@ -135,7 +138,11 @@ function pre_pan(~, ~)
     global Ns;
     for i=1:1:3
         c = mean(fig_tseries(i).XLim);
-    	fig_tseries(i).XLim = [c-Ns/Fs/2; c+Ns/Fs/2];
+        if((c-Ns/Fs/2)>0)
+            fig_tseries(i).XLim = [c-Ns/Fs/2; c+Ns/Fs/2];
+        else
+            fig_tseries(i).XLim = [0; Ns/Fs];
+        end
     end
 end
 function post_pan(~, evd)

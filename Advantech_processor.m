@@ -11,10 +11,11 @@ global Nch;
 global Filters;
 global channels;
 global win_lines;
+global h_chan_select;
 
 Ns = 512;
-scaling_constant = 1/24;
-f_cutoff = 400;
+scaling_constant = 1/24.6;
+f_cutoff = 450;
 PathName = 'D:\Documents\PhD\Field Studies\';
 [FileName,PathName,FilterIndex] = uigetfile(strcat(PathName, '*.wsdt'),'Pick File') %#ok<NOPTS>
 desc_id = fopen(strcat(PathName, 'Description.txt'));
@@ -30,11 +31,11 @@ time = data(:,1);
 Ts = time(2)-time(1);
 Fs = 1/Ts;
 
-[b, a] = butter(4, f_cutoff*2/Fs, 'low');
+[b, a] = butter(6, f_cutoff*2/Fs, 'low');
 Filters.Bl = tf2sos(b, a);
-[b, a] = butter(4, f_cutoff*2/Fs, 'low');
+[b, a] = butter(6, f_cutoff*2/Fs, 'low');
 Filters.BL = tf2sos(b, a);
-[b, a] = butter(4, 4.5*2/Fs, 'high');
+[b, a] = butter(4, 4.2*2/Fs, 'high');
 Filters.BH = tf2sos(b, a);
 
 %assign filters
@@ -62,18 +63,22 @@ SetupFigures(length(chan_data), strcat(PathName, FileName));
 proc_data = proc_filter(chan_data);
 %  filter();
 
-y_limits = [0 0];
+y_limits_1 = 0;
+y_limits_2 = 0;
+
 for i=1:1:Nch
     for j=1:1:3
         plot(fig_tseries(j), time, proc_data(:,j+3*(i-1)), 'DisplayName', channels{j+3*(i-1)});
         plot(fig_FullTS(j), time(1:10:end), proc_data(1:10:end,j+3*(i-1)));
         tmp = fig_tseries(j).YLim;
-        y_limits = [min([y_limits tmp]) max([y_limits tmp])];
+        y_limits_1 = max(abs([y_limits_1 tmp]));
+        tmp = fig_FullTS(j).YLim;
+        y_limits_2 = max(abs([y_limits_2 tmp]));
     end
 end
 for j=1:1:3
-    fig_FullTS(j).YLim = y_limits;
-    fig_tseries(j).YLim = y_limits;
+    fig_FullTS(j).YLim = [-1 1]*y_limits_2;
+    fig_tseries(j).YLim = [-1 1]*y_limits_1;
     %draw window
     lines = [   plot(fig_FullTS(j), [0 0], fig_FullTS(j).YLim, 'k')
                 plot(fig_FullTS(j), [1 1]*Ns/Fs, fig_FullTS(j).YLim, 'k')];
@@ -108,6 +113,8 @@ end
 for j=1:1:3
     fig_spectrum(j).YLim = y_limits;
 end
-
-channel_selector();
+if(exist('h_chan_select','var') && ishandle(h_chan_select))
+    close(h_chan_select);
+end
+h_chan_select = channel_selector();
 Ns_field.String = num2str(Ns);

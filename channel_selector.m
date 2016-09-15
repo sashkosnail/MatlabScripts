@@ -119,8 +119,13 @@ function edit1_Callback(hObject, eventdata, handles)
     Ns = str2double(get(hObject,'String'));
     for i = 1:1:3
         c = mean(fig_tseries(i).XLim);
-        fig_tseries(i).XLim = [c-Ns/Fs/2; c+Ns/Fs/2];
+        if((c-Ns/Fs/2)>0)
+            fig_tseries(i).XLim = [c-Ns/Fs/2; c+Ns/Fs/2];
+        else
+            fig_tseries(i).XLim = [0; Ns/Fs];
+        end
     end
+    SetupFigures(0,0,fig_tseries(1));
 end
 
 % --- Executes during object creation, after setting all properties.
