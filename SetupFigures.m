@@ -13,14 +13,14 @@ function SetupFigures(data_length, name)
         'ToolBar', 'figure', 'OuterPosition',[0.5, 0.5, 0.5, 0.5]);
     
     tsx = subplot('Position',[0.02 0.35 0.32 0.5]); 
-    axis([0 Ns/Fs -11 11]); 
+    axis([0 Ns/Fs -11 11]); axis autoy ; grid on
     hold on; tsx.Tag = 'X';
     tsy = subplot('Position',[0.35 0.35 0.32 0.5]); 
     axis([0 Ns/Fs -11 11]); %tsy.YAxis.Visible = 'off'; 
-    hold on; tsy.Tag = 'Y';
+    hold on; tsy.Tag = 'Y'; axis autoy; grid on
     tsz = subplot('Position',[0.68 0.35 0.32 0.5]); 
     axis([0 Ns/Fs -11 11]); %tsz.YAxis.Visible = 'off'; 
-    hold on; tsz.Tag = 'Z';
+    hold on; tsz.Tag = 'Z'; axis autoy; grid on
 
     ftsx = subplot('Position',[0.02 0.87 0.32 0.10]); 
     axis([0 data_length/Fs -11 11]); 
@@ -34,13 +34,16 @@ function SetupFigures(data_length, name)
 
     psdx = subplot('Position',[0.02 0.025 0.32 0.30]);
     hold on; psdx.YScale = 'log'; psdx.XScale = 'log'; 
-    psdx.XLim = [1 Fs/2];psdx.YLim = [-1*10^2 10];
+    psdx.XLim = [4.5 Fs/2];psdx.YLim = [.1E-6 0.01];; grid on 
+%     axis autoy
     psdy = subplot('Position',[0.35 0.025 0.32 0.30]); 
     hold on; psdy.YScale = 'log'; psdy.XScale = 'log';
-    psdy.XLim = [1 Fs/2];psdy.YLim = [-1*10^2 10];
+    psdy.XLim = [4.5 Fs/2];psdy.YLim = [.1E-6 0.01]; ; grid on
+%     axis autoy
     psdz = subplot('Position',[0.68 0.025 0.32 0.30]); 
     hold on; psdz.YScale = 'log'; psdz.XScale = 'log';
-    psdz.XLim = [1 Fs/2];psdz.YLim = [-1*10^2 10];
+    psdz.XLim = [4.5 Fs/2];psdz.YLim = [.1E-6 0.01]; ; grid on
+%     axis autoy
     
     ftsx.UserData = tsx; ftsy.UserData = tsy; ftsz.UserData = tsz;
     tsx.UserData = ftsx; tsy.UserData = ftsy; tsz.UserData = ftsz;    

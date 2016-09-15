@@ -18,11 +18,12 @@ function calc_spectrum(idc)
         tmp = child.YData(limit(1)+1:limit(2));
         data(:,k) = tmp;
     end
-    fft_data2 = fft(data.*repmat(ones(Ns,1),1,Nch), Ns, 1)/Ns;
-    fft_data_theta = angle(fft_data2);
-    fft_data_ampli = abs(fft_data2);
-    fft_data = fft_data_ampli(1:Ns/2,:);
-    fft_data(2:end-1,:) = 2*fft_data(2:end-1,:);
+    windata = data.*repmat(ones(Ns,1),1,Nch);
+    fftdata = fft(windata, Ns, 1)/Ns;
+    fft_data_theta = angle(fftdata);
+    fft_data_ampli = abs(fftdata);
+    fftdata = fftdata(1:Ns/2,:)+fftdata(end:-1:1+Ns/2,:);
+    fft_data = abs(fftdata);
 
     [ff, w] = freqz(Filters.BH, Ns/2);
     f=w./(2*pi/Fs);
