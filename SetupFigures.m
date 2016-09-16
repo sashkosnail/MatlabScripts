@@ -6,8 +6,11 @@ function SetupFigures(data_length, name, redraw)
     global fig_FullTS;
     global fig_spectrum;
     global fig_chan;
+    global fig_chan_disp;
+    global fig_chan_accel;
     global figs2;
     global channels;
+    global big_fig;
     
     if(exist('redraw','var'))
         ev.Axes = redraw;
@@ -15,40 +18,40 @@ function SetupFigures(data_length, name, redraw)
         return;
     end
     
-    figure('Name', name, 'Units','normalized', 'MenuBar', 'none', ...
-        'ToolBar', 'figure', 'OuterPosition',[0.5, 0.5, 0.5, 0.5]);
+    big_fig = figure('Name', name, 'Units','normalized', 'MenuBar', 'none', ...
+        'ToolBar', 'figure', 'Position',[0, 0, 1, 1]);
     
-    tsx = subplot('Position',[0.02 0.35 0.32 0.5]); 
+    tsx = subplot('Position',[0.03 0.35 0.315 0.5]); 
     tsx.XLim = [0 Ns/Fs]; axis autoy ; grid on
     hold on; tsx.Tag = 'X';
-    tsy = subplot('Position',[0.35 0.35 0.32 0.5]); 
+    tsy = subplot('Position',[0.355 0.35 0.315 0.5]); 
     tsy.XLim = [0 Ns/Fs]; tsy.YAxis.Visible = 'off'; 
     hold on; tsy.Tag = 'Y'; axis autoy; grid on
-    tsz = subplot('Position',[0.68 0.35 0.32 0.5]); 
+    tsz = subplot('Position',[0.68 0.35 0.315 0.5]); 
     tsz.XLim = [0 Ns/Fs]; tsz.YAxis.Visible = 'off'; 
     hold on; tsz.Tag = 'Z'; axis autoy; grid on
 
-    ftsx = subplot('Position',[0.02 0.87 0.32 0.10]); 
+    ftsx = subplot('Position',[0.03 0.87 0.315 0.10]); 
     axis([0 data_length/Fs -1 1]); axis autoy
     title(channels{1}(1));hold on; ftsx.Tag = 'Xf';
-    ftsy = subplot('Position',[0.35 0.87 0.32 0.10]); 
+    ftsy = subplot('Position',[0.355 0.87 0.315 0.10]); 
     axis([0 data_length/Fs -1 1]);  axis autoy
     ftsy.YAxis.Visible = 'off'; 
     title(channels{2}(1));hold on; ftsy.Tag = 'Yf';
-    ftsz = subplot('Position',[0.68 0.87 0.32 0.10]); 
+    ftsz = subplot('Position',[0.68 0.87 0.315 0.10]); 
     axis([0 data_length/Fs -1 1]); axis autoy
     ftsz.YAxis.Visible = 'off'; 
     title(channels{3}(1));hold on; ftsz.Tag = 'Zf';
 
-    psdx = subplot('Position',[0.02 0.025 0.32 0.30]);
+    psdx = subplot('Position',[0.03 0.05 0.315 0.27]);
     hold on; psdx.YScale = 'log'; psdx.XScale = 'log'; 
     psdx.XLim = [4.5 Fs/2];psdx.YLim = [.1E-6 0.01]; grid on 
 %     axis autoy
-    psdy = subplot('Position',[0.35 0.025 0.32 0.30]); 
+    psdy = subplot('Position',[0.355 0.05 0.315 0.27]); 
     hold on; psdy.YScale = 'log'; psdy.XScale = 'log';
     psdy.XLim = [4.5 Fs/2];psdy.YLim = [.1E-6 0.01]; grid on
 %     axis autoy
-    psdz = subplot('Position',[0.68 0.025 0.32 0.30]); 
+    psdz = subplot('Position',[0.68 0.05 0.315 0.27]); 
     hold on; psdz.YScale = 'log'; psdz.XScale = 'log';
     psdz.XLim = [4.5 Fs/2];psdz.YLim = [.1E-6 0.01]; grid on
 %     axis autoy
@@ -68,17 +71,36 @@ function SetupFigures(data_length, name, redraw)
     ftsy.ButtonDownFcn = @click_fts;
     ftsz.ButtonDownFcn = @click_fts;
     
+    fig_chan = get_triplet_figures('Velocity [m/s]');    
+    fig_chan_disp = get_triplet_figures('Displacement [m]');
+    fig_chan_accel = get_triplet_figures('Acceleration [m/s^2]');
+    xlabel(ftsy,'Time[s]');
+    ylabel(tsx,'Velocity [m/s]','Units','normalized', 'Position', [-0.04 0.5 0]);
+    xlabel(psdy,'Frequency[Hz]','Units','normalized', 'Position', [0.5 -0.025 0]);
+%     figs2 = figure('Name', 'Spectrum', 'Units','normalized', 'MenuBar', 'none', 'ToolBar', 'figure', 'OuterPosition',[0.5, 0, 0.25, 0.5]);
+%     figs2(2) = figure('Name', 'Corrected', 'Units','normalized', 'MenuBar', 'none', 'ToolBar', 'figure', 'OuterPosition',[0.75, 0, 0.25, 0.5]);
+    fig_tseries = [tsx tsy tsz];
+    fig_FullTS = [ftsx ftsy ftsz];
+    fig_spectrum = [psdx psdy psdz];
+    figure(big_fig);
+end
+
+function fig_chans = get_triplet_figures(label)
+    global channels
+    global Nch
+    global Ns
+    global Fs
     L = length(channels) - sum(strcmp(channels, 'xxx'));
     clear fig_chans;
-    disp('====================')
     for j=1:1:3
-        figure('Units', 'normalized', 'MenuBar', 'none', 'OuterPosition', [0,0,0.5,1]); clf
+        figure('Units', 'normalized', 'MenuBar', 'none', 'OuterPosition', [0,1/3*(3-j),1,1/2.5]); clf
         k=0;
         for i=1:1:Nch
             chan = channels{j+(i-1)*3};
             if(~(strcmp(chan, 'xxx')))
                 disp(chan)
-                figg = subplot('Position',[0.05, 0.05+0.95*k/(L/3), 0.9, 0.9/(L/3)]);  %#ok<*AGROW>
+%                 figg = subplot('Position',[0.05, 0.05+0.95*k/(L/3), 0.9, 0.9/(L/3)]);  %#ok<*AGROW>
+                figg = subplot('Position',[0.025, 0.1+0.9*k/(L/3), 0.97, 0.8/(L/3)]);  %#ok<*AGROW>
                 figg.Tag = chan;
                 figg.YLimMode = 'manual';
                 figg.XLimMode = 'manual';
@@ -92,20 +114,13 @@ function SetupFigures(data_length, name, redraw)
                 end
                 fig_chans(j, k) = figg;
             end
+            xlabel(fig_chans(j,1),'Time[s]','Units', 'normalized', 'Position', [0.5 -0.095 0]);
+            ylabel(fig_chans(j,1),label, 'Units','normalized', 'Position', [-0.015 1 0]);
         end
         if exist('fig_chans', 'var')
             fig_chans(j, 1).XAxis.Visible = 'on';
         end
-        disp('====================')
     end
-    
-    figs2 = figure('Name', 'Spectrum', 'Units','normalized', 'MenuBar', 'none', 'ToolBar', 'figure', 'OuterPosition',[0.5, 0, 0.25, 0.5]);
-    figs2(2) = figure('Name', 'Corrected', 'Units','normalized', 'MenuBar', 'none', 'ToolBar', 'figure', 'OuterPosition',[0.75, 0, 0.25, 0.5]);
-    
-    fig_tseries = [tsx tsy tsz];
-    fig_FullTS = [ftsx ftsy ftsz];
-    fig_spectrum = [psdx psdy psdz];
-    fig_chan = fig_chans;
 end
 
 function click_fts(obj, ~)
@@ -148,6 +163,8 @@ end
 function post_pan(~, evd)
     global win_lines;
     global fig_chan;
+    global fig_chan_disp;
+    global fig_chan_accel;
     global fig_tseries;
     global fig_FullTS;
     values = evd.Axes.XLim;
@@ -164,10 +181,16 @@ function post_pan(~, evd)
             for ch_fig = fig_chan
                 ch_fig(i).XLim = fig_tseries(i).XLim;
             end
+            for ch_fig = fig_chan_disp
+                ch_fig(i).XLim = fig_tseries(i).XLim; %#ok<*FXSET>
+            end
+            for ch_fig = fig_chan_accel
+                ch_fig(i).XLim = fig_tseries(i).XLim; %#ok<*FXSET>
+            end
             calc_spectrum(i);
         end     
-    catch
-        disp('Error')
+    catch ME
+        disp(ME.message)
     end
 end
 

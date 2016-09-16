@@ -22,7 +22,7 @@ function varargout = advantech_gui(varargin)
 
 % Edit the above text to modify the response to help advantech_gui
 
-% Last Modified by GUIDE v2.5 02-Dec-2015 23:05:44
+% Last Modified by GUIDE v2.5 15-Sep-2016 09:13:22
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -240,4 +240,57 @@ function checkbox1_CreateFcn(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    empty - handles not created until after all CreateFcns called
 set_colors(hObject, 1);
+end
+
+function pushbutton1_Callback(hObject, eventdata, handles)
+    global big_fig
+    global PathName
+    global FileName
+    global export_data
+    global channels
+    global fig_chan
+    global fig_chan_disp;
+    global fig_chan_accel;
+    global ranges;
+    hObject.Enable = 'off';
+    %export data
+    Obj.FileName = FileName;
+    Obj.Channels = channels;
+    Obj.Data = export_data;
+    disp(Obj);
+    save(strcat(PathName, FileName(1:end-4),'mat'), '-struct', 'Obj');
+    saveas(big_fig, strcat(PathName, FileName(1:end-4),'fig'));
+    big_fig.PaperPositionMode= 'auto';
+    print(big_fig, strcat(PathName, FileName(1:end-4),'png'),'-dpng', '-r0');
+    dlmwrite(strcat(PathName, FileName(1:end-4),'csv'), export_data);
+    for i=1:1:3
+        tmp = fig_chan(i,1).Parent;
+        tmp.PaperPositionMode= 'auto';
+        print(tmp, strcat(PathName, FileName(1:end-5), '_',...
+            channels{2*(i-1)+1}, '_', channels{2*i}, '_V.png'), ...
+            '-dpng', '-r0');
+        
+        tmp = fig_chan_disp(i,1).Parent;
+        tmp.PaperPositionMode= 'auto';
+        print(tmp, strcat(PathName, FileName(1:end-5), '_',...
+            channels{2*(i-1)+1}, '_', channels{2*i}, '_D.png'), ...
+            '-dpng', '-r0');
+        
+        tmp = fig_chan_accel(i,1).Parent;
+        tmp.PaperPositionMode= 'auto';
+        print(tmp, strcat(PathName, FileName(1:end-5), '_',...
+            channels{2*(i-1)+1}, '_', channels{2*i}, '_A.png'), ...
+            '-dpng', '-r0');
+    end
+    fid = fopen(strcat(PathName, FileName(1:end-5), '_MAX.csv'),'w');
+    fprintf(fid,', %s', channels{:});
+    tmp={'Acceleration';'Velocity';'Displacement';'Frequency'};   
+    for tt=1:1:4
+    	fprintf(fid, '\n%s, ',tmp{tt});
+        fprintf(fid, '%f, %f, %f, %f, %f, %f', ranges(tt,:)');
+    end
+    fclose(fid);
+    
+    disp('Saved')
+    hObject.Enable = 'on';
 end

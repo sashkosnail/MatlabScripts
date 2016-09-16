@@ -5,11 +5,14 @@ function calc_spectrum(idc)
     global Fs;
     global Filters;
     global Nch;
-    persistent h_old;
-    global figs2; 
+    global h_old;
+    global smooth_old;
+    global figs2
+    global fig_chan
     global fft_data;
-    fig = fig_spectrum(idc);
+    global ranges;
     
+    fig = fig_spectrum(idc);
     limit = int32(fig_tseries(idc).XLim*Fs);
     tmp = range(limit);
     data = zeros([tmp, Nch]);
