@@ -67,11 +67,11 @@ function calc_spectrum(idc)
     end
     for k=1:1:Nch
         if(Ns>10000)
-            if(isempty(smooth_old))
+            smooth_h = plot(fig_chan(idc,Nch-k+1), t(:,k), smooth_data(:,k),'r');
+            if(exist('smooth_old', 'var') && isempty(smooth_old))
                 smooth_old = repmat(smooth_h,Nch,3);
             end
             delete(smooth_old(k,idc));
-            smooth_h = plot(fig_chan(idc,Nch-k+1), t(:,k), smooth_data(:,k),'r');
             smooth_old(k,idc) = smooth_h;
         else
             if(~isempty(smooth_old))

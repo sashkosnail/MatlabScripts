@@ -284,7 +284,7 @@ function pushbutton1_Callback(hObject, eventdata, handles)
     end
     fid = fopen(strcat(PathName, FileName(1:end-5), '_MAX.csv'),'w');
     fprintf(fid,', %s', channels{:});
-    tmp={'Acceleration';'Velocity';'Displacement';'Frequency'};   
+    tmp={'Acceleration [m/s^2]';'Velocity [mm/s]';'Displacement [um]';'Frequency [Hz]'};   
     for tt=1:1:4
     	fprintf(fid, '\n%s, ',tmp{tt});
         fprintf(fid, '%f, %f, %f, %f, %f, %f', ranges(tt,:)');

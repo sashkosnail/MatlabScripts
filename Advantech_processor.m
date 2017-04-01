@@ -111,25 +111,37 @@ for i=1:1:Nch
 %         max_valV = max([abs(vel); max_valV]);
         legend(fig_chan(j,i), 'show');
         legend(fig_chan(j,i), 'boxoff');
-        fig_chan(j,i).YLim = max(abs(vel)).*[-1 1];
+        if(max(abs(vel)>0))
+            fig_chan(j,i).YLim = max(abs(vel)).*[-1 1];
+        end
         
         displ = cumtrapz(vel)/Fs;
+        displ = displ - mean(displ);
         plot(fig_chan_disp(j, i), time, displ, 'DisplayName', channels{j+3*(i-1)});
 %         max_valD = max([abs(displ); max_valD]);
         legend(fig_chan_disp(j,i), 'show');
         legend(fig_chan_disp(j,i), 'boxoff');
-        fig_chan_disp(j,i).YLim = max(abs(displ)).*[-1 1];
+        if(max(abs(displ)>0))
+            fig_chan_disp(j,i).YLim = max(abs(displ)).*[-1 1];
+        end
         
         accel = diff(vel)*Fs;
+        accel = accel - mean(accel);
         plot(fig_chan_accel(j, i), time(1:end-1), accel, 'DisplayName', channels{j+3*(i-1)});
 %         max_valA = max([abs(accel); max_valA]);
         legend(fig_chan_accel(j,i), 'show');
         legend(fig_chan_accel(j,i), 'boxoff');
-        fig_chan_accel(j,i).YLim = max(abs(accel)).*[-1 1];
+        if(max(abs(accel)>0))
+            fig_chan_accel(j,i).YLim = max(abs(accel)).*[-1 1];
+        end
         
+%         ranges(1,(i-1)*3+j) = std(accel)*2*sqrt(2);
+%         ranges(2,(i-1)*3+j) = 1000*std(vel)*2*sqrt(2);
+%         ranges(3,(i-1)*3+j) = 1000000*std(displ)*2*sqrt(2);
         ranges(1,(i-1)*3+j) = range(accel);
-        ranges(2,(i-1)*3+j) = range(vel);
-        ranges(3,(i-1)*3+j) = range(displ);
+        ranges(2,(i-1)*3+j) = 1000*range(vel);
+        ranges(3,(i-1)*3+j) = 1000000*range(displ);
+
     end
 end
 

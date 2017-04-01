@@ -25,8 +25,14 @@ function h=subaxis(varargin)
 %
 % 2001-2014 / Aslak Grinsted  (Feel free to modify this code.)
 
-f=gcf;
+Argz=struct('Holdaxis',0, ...
+        'SpacingVertical',0.025,'SpacingHorizontal',0.025, ...
+        'PaddingLeft',0,'PaddingRight',0,'PaddingTop',0,'PaddingBottom',0, ...
+        'MarginLeft',0.01,'MarginRight',0.01,'MarginTop',0.01,'MarginBottom',0.01, ...
+        'rows',[],'cols',[], 'Parent', ''); 
+Argz=parseArgs(varargin,Argz,{'Holdaxis'},{'Parent'},{'Spacing' {'sh','sv'}; 'Padding' {'pl','pr','pt','pb'}; 'Margin' {'ml','mr','mt','mb'}});
 
+f=Argz.Parent;
 
 
 UserDataArgsOK=0;
@@ -41,9 +47,9 @@ if isempty(Args)&&(~UserDataArgsOK)
         'SpacingVertical',0.05,'SpacingHorizontal',0.05, ...
         'PaddingLeft',0,'PaddingRight',0,'PaddingTop',0,'PaddingBottom',0, ...
         'MarginLeft',.1,'MarginRight',.1,'MarginTop',.1,'MarginBottom',.1, ...
-        'rows',[],'cols',[]); 
+        'rows',[],'cols',[], 'Parent', ''); 
 end
-Args=parseArgs(varargin,Args,{'Holdaxis'},{'Spacing' {'sh','sv'}; 'Padding' {'pl','pr','pt','pb'}; 'Margin' {'ml','mr','mt','mb'}});
+Args=parseArgs(varargin,Argz,{'Holdaxis'},{'Parent'},{'Spacing' {'sh','sv'}; 'Padding' {'pl','pr','pt','pb'}; 'Margin' {'ml','mr','mt','mb'}});
 
 if (length(Args.NumericArguments)>2)
     Args.rows=Args.NumericArguments{1};
