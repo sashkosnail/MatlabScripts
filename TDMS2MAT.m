@@ -13,7 +13,7 @@ Results(length(FileName)) = struct();
 
 for idx = 1:1:length(FileName)
     D = TDMS_getStruct([PathName FileName{idx}],5);
-    mat_file = [PathName FileName{idx}(1:end-4) '.mat'];
+    mat_file = [PathName FileName{idx}(1:end-4) 'mat'];
     save(mat_file, 'D');
     Nch = size(D,2)-1;
     

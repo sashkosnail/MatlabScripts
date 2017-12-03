@@ -1,4 +1,6 @@
 figure(99); clf
+t = D(:,1);
+data = D(:,2:end);
 DATA = struct();
 DATA.X = data(:,1:3:end);
 DATA.Y = data(:,2:3:end);
