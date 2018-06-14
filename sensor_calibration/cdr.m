@@ -1,17 +1,17 @@
 function cdr(xlsfile, peaks, polarity, ax)
     fi = @(varargin)varargin{length(varargin)-varargin{1}};
     res_data = xlsread(xlsfile, 'Details');      
-    num_pts = 4;
+    num_pts = 5;
 %     num_samples = 10*fi(polarity=='b',2,1);
     
     summary_table = table;
     max_peaks = 0;
     for i=1:1:size(peaks,1)
         Rin = res_data(1,1);
-        Rsh = res_data(i,end);
-        Rdaq = res_data(1,end);
+        Rsh = res_data(i,4);
+        Rdaq = res_data(num_pts,4);
         summary_table(i,1:3)={mat2cell(peaks(i,1).Name,1), Rin, Rsh};
-        if(i==1) 
+        if(i==num_pts) 
             Rtmp = Rdaq;
         else
             Rtmp = Rsh*Rdaq/(Rsh+Rdaq);
@@ -117,9 +117,7 @@ function cdr(xlsfile, peaks, polarity, ax)
     text(1.1*min(cdrPlot(:,2)), max(cdrPlot(:,5)), sprintf('%3.2fx + %3.2f', cdrFfit.p1, cdrFfit.p2));
 %     axis([min(cdrPlot(:,2)) max(cdrPlot(:,2)) min(cdrPlot(:,5)) max(cdrPlot(:,5))])
     global frange
-    if(polarity == 'b')
-        frange = 2*[-0.05 0.05] + round(100*mean(cdrPlot(:,5)))/100;
-    end
+    frange = floor(100*(min(cdrPlot(:,5))+[-0.1 range(cdrPlot(:,5))+0.1]))/100;
     axis([rrang frange]);
     grid minor; xlabel('1/R'); ylabel('Fn[Hz]');
     legend off;

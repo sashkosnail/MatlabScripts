@@ -6,7 +6,7 @@
 %     disp()
 % end
 
-function [peak_data, maxVpp]= find_Vpp_window(data, distances, Fs)
+function [peak_data, maxVpp]= find_Vpp_window(data, ~)
     dp = data; dp(data < 0) = 0;
     dn = data; dn(data > 0) = 0;
     peak_data = zeros(size(data,2),2);

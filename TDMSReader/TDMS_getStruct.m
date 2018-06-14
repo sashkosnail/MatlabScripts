@@ -18,9 +18,9 @@ function [output,metaStruct] = TDMS_getStruct(filePath,structVersion,readOptions
 %             TDMS_dataToGroupChanStruct_v4
 
 %LOCAL CONSTANTS
-DEFAULT_STRUCT_VERSION = 5;  %Feel free to change me if you'd like something different
+DEFAULT_STRUCT_VERSION = 4;  %Feel free to change me if you'd like something different
 %This is particular to my lab, although you might prefer 3
-CONV_RANGE = [1 5];
+CONV_RANGE = [1 6];
 
 %filePath input handling
 if nargin < 1 || isempty(filePath)
@@ -58,6 +58,9 @@ end
 
 %POST PROCESSING
 %==============================================================
+if (structVersion == 6 && length(temp.data) == 28) %must be PITA
+    structVersion = 5;
+end
 switch structVersion
     case 1
         output = TDMS_dataToGroupChanStruct_v1(temp,structConvOptions{:});
@@ -72,4 +75,6 @@ switch structVersion
         data = [time cell2mat(temp.data(metaStruct.isChan)')'];
         varnames = ['Time' temp.chanNames{1}];
         output = array2table(data, 'VariableNames', varnames);
+    case 6
+        output = array2table(cell2mat(temp.data(metaStruct.isChan)')', 'VariableNames', temp.chanNames{1});
 end

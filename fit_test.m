@@ -11,8 +11,8 @@ function peak = fit_test(data, name, Ts)
         'independent', 'n', 'problem', 'Ts');
     fo = fitoptions(ft);
     %'A'    'D'    'n0'    'o'    'phi'    'w0'
-    fo.Lower = [0.01, 0.2, 0, 0, 0, 0.5*2*pi];
-    fo.Upper = [100, 0.707, 30, 0, 0, 1.5*2*pi];
+    fo.Lower = [0.01, 0.2, 0, 0, 0, 3.0*2*pi];
+    fo.Upper = [100, 0.9, 30, 0, 0, 5.0*2*pi];
     fo.StartPoint = [0.01, 0.707, 0, 0, 0, 1*2*pi];
     wcoff = 150;
 %     fo.Weights = zeros(length(n),1);

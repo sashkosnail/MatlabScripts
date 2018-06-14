@@ -21,16 +21,20 @@ function ProcessPITA_Vpp
 %     sensor_distance = [0 22+(0:1:6)*sensor_distance];
 %     sensor_distance = [0 22 37.5 42+(0:1:4)*sensor_distance]; 
     sensor_distance = [(0:5)*sensor_distance 32+(0:1)*sensor_distance];
-    cutoffs = [5 10 20 50 100];
+    cutoffs = [5];
     %process file
     disp('==============================================================');
     disp(FileName)
     %load data
     DATA = load([PathName FileName{1}]);
-    t=DATA.D(:,1);
+    if(istable(DATA.D))
+        data = table2array(DATA.D(:,2:end));
+        t = table2array(DATA.D(:,1));
+    else
+        data = DATA.D(:,2:end);
+        t=DATA.D(:,1);
+    end
     Ts = t(2)-t(1); Fs = 1.0/Ts;
-    data = DATA.D(:,2:end);
-    tmp = data(:,[4,5,6]);
 %     data(:,[4,5,6]) = data(:,[7,8,9]);
 %     data(:,[7,8,9]) = tmp;
     %BANDPASS FILTERS

@@ -1,55 +1,54 @@
-function [pdata_n, pdata_p] = step_response(xlsfile)
-tables_n=readtable(xlsfile, 'Sheet', 'N');
-tables_p = table();
-pdata_n = [];
-pdata_p = [];
-% tables_p=readtable(xlsfile, 'Sheet', 'P');
-dir = 'n';
+function [output_data] = step_response2(xlsfile, fit_params, polarity)
+
+tables_n=readtable(xlsfile, 'Sheet', polarity);
+output_data = [];
 for ctab = {tables_n}
     tab = ctab{1};
     t = table2array(tab(:,1));
     Ts = t(2)-t(1);
     Fs = 1/Ts;
     Wn = 512;
-    num_tests = 3;
+    num_tests = 5;
+    
     data = table2array(tab(:,2:2:2*num_tests+1));
-    pulse = table2array(tab(:,3:2:2*num_tests+1));
-    pulse(isnan(pulse))=0;
     data=data(:,1:num_tests);
     data(isnan(data))=0;
-    pulse=pulse(:,1:num_tests)<rms(rms(pulse))/2;
     Nch = min(size(data)) %#ok<NOPRT>
 
-    fprintf(strcat('____________________________________________________________________', ...
-        '________________________________________________________________\n'));
+    fprintf(strcat('_________________________________________________________________', ...
+        '____________________________________________________________________\n'));
     fprintf(strcat('|Channel\t\t#P\t|\t\tA\t\t|\t\tmA\t\t', ...
         '|\t\tD\t\t|\t\tmD\t\t|\t\tFn\t\t|\t\tmFn\t\t|\t\tFd\t\t|\n'));
     fprintf(strcat('|\t\t\t\t\t|mean\tstd\t\t|mean\tstd\t\t|', ...
         'mean\tstd\t\t|mean\tstd\t\t|mean\tstd\t\t|mean\tstd\t\t|', ...
         'mean\tstd\t\t|\n'))
 
-    [num, den] = butter(8, 5*2*pi/Fs, 'low');
-
+    [num, den] = butter(8, 20*2/Fs, 'low');
     for i=1:1:Nch
-%         p=diff(pulse(:,i));
         p=data(:,i);
+        if (polarity == 'P')
+            p=-p;
+        end
         figure(mod(i-1,num_tests)+1);clf;
-        a = filtfilt(num, den, data(:, i));
+        a = filtfilt(num, den, p);
         %SELECT PEAK
         peak_id = 1;
+        figure(100);clf;old_start = 0;hold on; start_id = 0;
+        plot(a); set(gcf, 'Toolbar','none');
         while true
-            window_size = min(length(a),Wn);
             if(isempty(a))
                 break;
             end
-            [~,k] = findpeaks(abs(a), 'Npeaks', 1, 'minpeakheight', 0.9*min(max(a),75));  
+            [~,k] = findpeaks(abs(a), 'Npeaks', 1, 'minpeakheight', 0.75*max(a));  
             if isempty(k)
                 break;
             end
-            start_id = k-70;
-            figure(100);clf;hold on;
-            plot(a); set(gcf, 'Toolbar','none');
-            plot([start_id start_id] ,[-.5 .5],'r--');
+            if(start_id ~= 0)
+                old_start = old_start + start_id + window_size - 200;
+            end
+            window_size = min(length(a),Wn);
+            start_id = max(1, k-40);
+            
             %CHOP OFF PEAK
             if(length(a) < start_id + window_size)
                 peak = a(start_id:end);
@@ -57,29 +56,26 @@ for ctab = {tables_n}
                 p = [];
             else
                 peak = a(start_id:start_id+window_size);
-                a = a((start_id+window_size):end);
-                p = p((start_id+window_size):end);
+                a = a((start_id+window_size-200):end);
+                p = p((start_id+window_size-200):end);
             end
-            offset = mean(peak(end:-1:end-128));
+%             offset = mean(peak(end:-1:end-128));
             %zero peak offset
-            peak = peak - offset;
-            if (peak(51)-peak(50))<0
+%             peak = peak - offset;
+            
+            %pick peak direction
+            
+            figure(100);hold on;
+            
+            if (peak(11)-peak(10))<0
+                plot([old_start+start_id old_start+start_id] ,[-.5 .5],'r--');
                 continue;
+            else
+                plot([old_start+start_id old_start+start_id] ,[-.5 .5],'g--');
             end
-            %CALCULATE parameters
-%             [~, mi] = max(peak);
-%             [~, ni] = min(peak(mi:end));
-%             [~, ti] = max(peak(mi+ni:end));
-%             ws = 5;
-%             if((ni+mi)<11||length(peak)<(ni+mi+ti+ws))
-%                 continue;
-%             end
-%             mx = mean(peak(mi-ws:mi+ws));
-%             nx = mean(peak(ni+mi-ws:ni+mi+ws));
-%             tx = mean(peak(ti+ni+mi-ws:ti+ni+mi+ws));
-%             extr = sort(abs([mx nx tx]));
-            ws = floor(Fs/250)
-            [pks, locs] = findpeaks(peak,'Npeaks',2,'MinPeakDistance',100,'MinPeakProminence', 0.065);
+
+            ws = floor(Fs/250);
+            [pks, locs] = findpeaks(peak,'Npeaks',2,'MinPeakDistance',25,'MinPeakProminence', 0.065);
             extr = zeros(1,length(pks)*2);
             mFd = zeros(1,length(pks));
             min_id = zeros(length(pks),1);
@@ -92,6 +88,8 @@ for ctab = {tables_n}
 %             A = mean(extr(2:end)./extr(1:end-1));
             if(length(extr)>=3)
                 A = (extr(1)+extr(2))/(extr(2)+extr(3));
+            elseif(isempty(extr))
+                break;
             else
                 A = extr(1)/extr(2);
             end
@@ -100,7 +98,7 @@ for ctab = {tables_n}
             Fn = Fd/sqrt(1-D^2);
 
             %nLMS optimize generic response curve
-            peakd = fit_test(peak, tab.Properties.VariableNames{2*i}, Ts);
+            peakd = fit_test2(peak, tab.Properties.VariableNames{2*i}, Ts, fit_params);
             peakd.Ch = i;
             peakd.ID = peak_id;
             peakd.Fd = Fd;
@@ -144,7 +142,7 @@ for ctab = {tables_n}
                 '+---------------+---------------', ...
                 '+---------------+\n'));
         end
-        fprintf('|%2d(%s)\t%d\t', i, tab.Properties.VariableNames{2*i}, peak_id-1);
+        fprintf('|%s\t%d', tab.Properties.VariableNames{2*i}, peak_id-1);
         fprintf('\t|%6.3f\t%6.3f', mean(Aavg), std(Aavg));
         fprintf('\t|%6.3f\t%6.3f', mean(mAavg), std(mAavg));
         fprintf('\t|%6.3f\t%6.3f', mean(Davg), std(Davg));
@@ -154,11 +152,6 @@ for ctab = {tables_n}
         fprintf('\t|%6.3f\t%6.3f\t|\n', mean(Fdavg), std(Fdavg)); 
     end
     fprintf('-------------------------------------------------------------------------------------------------------------------------------------\n'); 
-    if(dir=='n')
-        pdata_n = pdata;
-    else
-        pdata_p = pdata;
-    end
-    dir = 'p';
+    output_data = pdata;
 end
 end
