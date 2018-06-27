@@ -131,7 +131,7 @@ function slider_moved_callback(hObject, ~, data)
     fftdata(2:end-1,:) = 2*fftdata(2:end-1,:);
     fftdata_filt = filtfilt(ones(1,5),1,fftdata);
     f = Fs*(1:N/2)'/N;
-    fft_range = max(max(abs(fftdata_filt)));
+    fft_range = [min(min(abs(fftdata_filt))) max(max(abs(fftdata_filt)))];
     data_range = [-1 1].*max(max(abs(window_data)));
     text_locations = [0.75 0 -0.75]*data_range(2)*.75;
     peak_data = find_Vpp_window(window_data);
@@ -168,7 +168,7 @@ function slider_moved_callback(hObject, ~, data)
                 'Color', 'k', 'BackgroundColor',[0.9 0.9 0.9]);
         end
         hold off
-        
+        ylim(data_range)
         subplot('Position',[0.85, plot_vert_size*idx+0.05, 0.145, plot_vert_size], ...
         'Xgrid', 'off', 'Ygrid', 'off', 'Color', 'w'); 
         loglog(f,abs(fftdata_filt(:,data_id)), 'LineWidth', 1);
@@ -182,7 +182,7 @@ function slider_moved_callback(hObject, ~, data)
         else
             ax.XAxis.Visible = 'off';
         end
-        ylim([10^-3 fft_range])
+        ylim(fft_range)
         set(gca, 'YTick', [0.001 1], 'XTick',[0.1 1 10 100]);
     end
     l = legend('X','Y','Z');

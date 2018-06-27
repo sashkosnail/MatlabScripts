@@ -16,8 +16,9 @@ if(exist([PathName 'sensor_configuration.txt'], 'file'))
     sensor_config = sensor_config(1:min(height(sensor_config),8),:);
 else
     %default config
-    sensor_config = table((1:8)', strcat('s',num2str((1:8)')), ...
-        repmat('xyz',8,1), 'VariableNames',{'Ch','Name','Components'});
+    sensor_config = table((1:8)', cellstr(strcat('s',num2str((1:8)'))), ...
+        cellstr(repmat('xyz',8,1)), ...
+        'VariableNames',{'Ch','Name','Components'});
 end
 
 active_ids = find(~strcmp(sensor_config.Name,'0'))';
@@ -84,7 +85,7 @@ for idx = 1:1:length(FileName)
     data = filtfilt(fnum, fden, data);
     
     %gather and display statistics of signals
-    STATS = signal_stats(D, names);
+    STATS = signal_stats(D, names); 
     disp(STATS);
     
     %plot signals

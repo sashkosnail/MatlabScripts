@@ -76,5 +76,9 @@ switch structVersion
         varnames = ['Time' temp.chanNames{1}];
         output = array2table(data, 'VariableNames', varnames);
     case 6
+        time_id=find(metaStruct.isChan,1,'first');
+        t=temp.data{time_id}; 
+        t={t(1:length(temp.data{time_id+1}))};
+        temp.data(time_id) = t;
         output = array2table(cell2mat(temp.data(metaStruct.isChan)')', 'VariableNames', temp.chanNames{1});
 end
