@@ -4,10 +4,11 @@ function fig = plot_sensor_data(D, fig_name, names)
     data = D(:,2:end);
     N = 2^(nextpow2(length(data))-1);
     fftdata = data(1:1:N,:);
-    fftdata = abs(fft(fftdata.*repmat(hamming(N), 1, Nsensors*3), N, 1)/N);
+    fftdata = abs(fft(fftdata, N, 1)/N);
     fftdata = abs(fftdata(ceil(1:N/2),:));
     fftdata(2:end-1,:) = 2*fftdata(2:end-1,:);
-    fftdata_filt = filtfilt(triang(11)',1,fftdata);
+    fftdata_filt = fftdata;
+%     fftdata_filt = filtfilt(triang(11)',1,fftdata);
 %     fft_range = max(max(abs(fftdata_filt)));
     
     f = Fs*(1:N/2)'/N;

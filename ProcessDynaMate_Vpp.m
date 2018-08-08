@@ -1,6 +1,7 @@
 %process PITA data
 function ProcessDynaMate_Vpp
-    global window_size Fs PathName num_sensors signal_length
+    global window_size Fs PathName num_sensors signal_length specSmoothN 
+    global sensorNames applyHamming
     close all
     %prompt for input files
     if((~exist('PathName', 'var'))|(PathName == 0)) %#ok<OR2>
@@ -14,6 +15,12 @@ function ProcessDynaMate_Vpp
     if(~exist('window_size','var')||isempty(window_size));
         window_size = 1024;
     end
+    if(~exist('specSmoothN','var')||isempty(specSmoothN));
+        specSmoothN = 11;
+    end
+    if(~exist('applyHamming','var')||isempty(applyHamming));
+        applyHamming = 1;
+    end
     %process file
     disp('==============================================================');
     disp(FileName)
@@ -24,7 +31,8 @@ function ProcessDynaMate_Vpp
         t = table2array(DATA.D(:,1));
     else
         data = DATA.D(:,2:end);
-        t=DATA.D(:,1);
+        t = DATA.D(:,1);
+        sensorNames = DATA.sensor_config.Name';
     end
     Ts = t(2)-t(1); Fs = 1.0/Ts;
     num_sensors = size(data,2)/3;
@@ -35,21 +43,34 @@ function ProcessDynaMate_Vpp
     full_plot = subplot('Position', [0 0.87 1 0.09]);
     time_slider = uicontrol('Parent', fig, 'Style', 'slider', ...
         'Value', 0, 'Min', 0, 'Max', signal_length-window_size, ...
-        'Units', 'normalized', 'Position', [0 0.98 0.85 0.02], ...
+        'Units', 'normalized', 'Position', [0 0.98 0.72 0.02], ...
         'SliderStep', [0.001 0.001], 'UserData', signal_length, ...
-        'Callback', {@slider_moved_callback, data});
+        'Callback', {@slider_moved_callback, data}, ...
+        'ToolTipString','Time Slider');
     time_tb = uicontrol('Parent', fig, 'Style', 'edit', ...
-        'Units', 'normalized', 'Position', [0.9 0.98 0.05 0.02], ...
+        'Units', 'normalized', 'Position', [0.72 0.98 0.05 0.02], ...
         'KeyReleaseFcn', {@time_tb_callback, data}, ...
-        'UserData', time_slider);
-    window_size_tb = uicontrol('Parent', fig, 'Style', 'edit', ...
+        'UserData', time_slider, 'ToolTipString', 'Window Center Time');
+    hamming_cb = uicontrol('Parent', fig, 'Style', 'checkbox', ...
+        'Units', 'normalized', 'Position', [0.77 0.98 0.08 0.02], ...
+        'Callback', {@hamming_cb_callback, data}, ...
+        'UserData', time_slider, 'String', 'Apply Hamming Window', ...
+        'ToolTipString', 'Apply Hamming to Window', 'Value', 1); %#ok<NASGU>
+    spec_smooth_N_tb = uicontrol('Parent', fig, 'Style', 'edit', ...
         'Units', 'normalized', 'Position', [0.85 0.98 0.05 0.02], ...
+        'KeyReleaseFcn', {@spec_smooth_N_tb_callback, data}, ...
+        'UserData', time_slider, 'String', num2str(specSmoothN), ...
+        'ToolTipString', 'Spectrum Smooth Box Size'); %#ok<NASGU>
+    window_size_tb = uicontrol('Parent', fig, 'Style', 'edit', ...
+        'Units', 'normalized', 'Position', [0.9 0.98 0.05 0.02], ...
         'KeyReleaseFcn', {@window_size_tb_callback, data}, ...
-        'UserData', time_slider, 'String', num2str(window_size)); %#ok<NASGU>
+        'UserData', time_slider, 'String', num2str(window_size), ...
+        'ToolTipString', 'Window Size'); %#ok<NASGU>
     save_button = uicontrol('Parent', fig, 'Style', 'pushbutton', ...
         'Units', 'normalized', 'Position', [0.95 0.98 0.05 0.02], ...
         'Callback', {@savebutton_callback, data}, ...
-        'UserData', time_tb, 'String', 'Save Data'); %#ok<NASGU>
+        'UserData', time_tb, 'String', 'Save Data', ...
+        'ToolTipString', 'Save'); %#ok<NASGU>
     set(time_slider, 'UserData', ...
         struct('Plot', full_plot, 'VertBars', [], 'TimeTB', time_tb));
     plot(t, data, 'ButtonDownFcn', {@full_plot_callback, data}, ...
@@ -58,6 +79,13 @@ function ProcessDynaMate_Vpp
     set(gca, 'Color', 'w', 'GridColor', 'k', ...
         'XAxisLocation', 'top');
     %trigger drawing callback
+    slider_moved_callback(time_slider, 0, data);
+end
+
+function hamming_cb_callback(hObject, ~, data)
+    global applyHamming
+    time_slider = hObject.UserData;
+    applyHamming = hObject.Value;
     slider_moved_callback(time_slider, 0, data);
 end
 
@@ -86,6 +114,21 @@ function time_tb_callback(hObject, eventData, data)
     slider_moved_callback(time_slider, 0, data);
 end
 
+function spec_smooth_N_tb_callback(hObject, eventData, data)
+    global specSmoothN    
+    
+    time_slider = hObject.UserData;
+    if(~strcmp(eventData.Key, 'return'))
+        return;
+    end
+    val = str2double(hObject.String);
+    if(isnan(val))
+        return
+    end
+    specSmoothN = val;
+    slider_moved_callback(time_slider, 0, data);
+end
+
 function window_size_tb_callback(hObject, eventData, data)
     global window_size signal_length
     
@@ -103,8 +146,33 @@ function window_size_tb_callback(hObject, eventData, data)
     slider_moved_callback(time_slider, 0, data);
 end
 
+function savebutton_callback(hObject, ~, data)
+    global PathName STATS Fs
+    fig = hObject.Parent;
+    time_tb = hObject.UserData;
+    default_name = fig.Name;
+    default_name(isspace(default_name))=[];
+    dash_idx = find(default_name=='-') - 1;
+    default_name = [default_name(1:dash_idx), '_', time_tb.String, ...
+        '_', default_name(dash_idx+2:end)];
+    
+    [FileName,PathName_save] = uiputfile('*.png', 'Save Results', ...
+        [PathName, default_name]);
+    if(FileName == 0) ;return; end
+    
+    export_fig(strcat(PathName_save, FileName(1:end-4)), ...
+        '-c[20 0 0 0]', fig);
+    writetable(STATS, [PathName_save, FileName(1:end-4),'.xlsx'], ...
+        'WriteRowNames', 1);
+    
+    savefig(fig,strcat(PathName_save, fig.Name),'compact');
+    csvwrite([PathName_save, fig.Name,'.csv'], ...
+        [(0:1:length(data)-1)'/Fs data]);
+    disp('Save Complete')
+end
+
 function slider_moved_callback(hObject, ~, data)
-    global window_size Fs num_sensors
+    global window_size Fs num_sensors specSmoothN applyHamming
     texts = {'X','Y','Z'};
     time_slider = hObject;
     time_slider.Value = floor(time_slider.Value);
@@ -125,11 +193,19 @@ function slider_moved_callback(hObject, ~, data)
         'Color', 'r', 'LineWidth', 2, 'LineStyle','--');
     time_slider.UserData.VertBars = vert_bars;
     %obtain spectrum
-    fftdata = abs(fft(window_data.*repmat(hamming(N), 1, size(data,2)), ...
-        N, 1)/(N-1));
+    if(applyHamming)
+        window_function = repmat(hamming(N), 1, size(data,2));
+    else
+        window_function = ones(N,size(data,2));
+    end
+    fftdata = abs(fft(window_data.*window_function, N, 1)/(N-1));
     fftdata = abs(fftdata(ceil(1:N/2),:));
     fftdata(2:end-1,:) = 2*fftdata(2:end-1,:);
-    fftdata_filt = filtfilt(ones(1,5),1,fftdata);
+    if(specSmoothN == 1)
+        fftdata_filt = fftdata;
+    else
+        fftdata_filt = filtfilt(ones(1,specSmoothN),1,fftdata);
+    end
     f = Fs*(1:N/2)'/N;
     fft_range = [min(min(abs(fftdata_filt))) max(max(abs(fftdata_filt)))];
     data_range = [-1 1].*max(max(abs(window_data)));
@@ -139,7 +215,7 @@ function slider_moved_callback(hObject, ~, data)
     plot_vert_size = 0.91/num_sensors*.9;
     for idx = 0:1:num_sensors - 1
         data_id = ((num_sensors -1 - idx)*3 + 1):((num_sensors - idx)*3);
-        subplot('Position',[0.015, plot_vert_size*idx+0.05, 0.81, plot_vert_size], ...
+        subplot('Position',[0.015, plot_vert_size*idx+0.05, 0.71, plot_vert_size], ...
         'Xgrid', 'off', 'Ygrid', 'off', 'Color', 'w');
         plot(t,window_data(:,data_id), 'LineWidth', 1);
         grid on; hold on
@@ -169,7 +245,7 @@ function slider_moved_callback(hObject, ~, data)
         end
         hold off
         ylim(data_range)
-        subplot('Position',[0.85, plot_vert_size*idx+0.05, 0.145, plot_vert_size], ...
+        subplot('Position',[0.75, plot_vert_size*idx+0.05, 0.245, plot_vert_size], ...
         'Xgrid', 'off', 'Ygrid', 'off', 'Color', 'w'); 
         loglog(f,abs(fftdata_filt(:,data_id)), 'LineWidth', 1);
         grid on; set(gca, 'Color', 'w', 'GridColor', 'k', ...
@@ -183,34 +259,10 @@ function slider_moved_callback(hObject, ~, data)
             ax.XAxis.Visible = 'off';
         end
         ylim(fft_range)
+        xlim([f(1), f(end)]);
         set(gca, 'YTick', [0.001 1], 'XTick',[0.1 1 10 100]);
     end
     l = legend('X','Y','Z');
     l.TextColor = 'k';
     l.Location = 'south';
-end
-
-function savebutton_callback(hObject, ~, data)
-    global PathName STATS Fs
-    fig = hObject.Parent;
-    time_tb = hObject.UserData;
-    default_name = fig.Name;
-    default_name(isspace(default_name))=[];
-    dash_idx = find(default_name=='-') - 1;
-    default_name = [default_name(1:dash_idx), '_', time_tb.String, ...
-        '_', default_name(dash_idx+2:end)];
-    
-    [FileName,PathName_save] = uiputfile('*.png', 'Save Results', ...
-        [PathName, default_name]);
-    if(FileName == 0) ;return; end
-    
-    export_fig(strcat(PathName_save, FileName(1:end-4)), ...
-        '-c[20 0 0 0]', fig);
-    writetable(STATS, [PathName_save, FileName(1:end-4),'.xlsx'], ...
-        'WriteRowNames', 1);
-    
-    savefig(fig,strcat(PathName_save, fig.Name),'compact');
-    csvwrite([PathName_save, fig.Name,'.csv'], ...
-        [(0:1:length(data)-1)'/Fs data]);
-    disp('Save Complete')
 end
