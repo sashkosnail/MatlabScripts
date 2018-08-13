@@ -29,6 +29,7 @@ function ProcessDynaMate_Vpp
     if(istable(DATA.D))
         data = table2array(DATA.D(:,2:end));
         t = table2array(DATA.D(:,1));
+        sensorNames =  DATA.sensor_config.Properties.VariableNames;
     else
         data = DATA.D(:,2:end);
         t = DATA.D(:,1);

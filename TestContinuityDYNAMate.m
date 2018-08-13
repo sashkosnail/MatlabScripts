@@ -4,7 +4,10 @@ if((~exist('PathName', 'var'))|(PathName == 0)) %#ok<OR2>
 end
 [FileName, PathName, ~] = uigetfile([PathName, '*.tdms'],'Pick File','MultiSelect','on');
 if(~iscell(FileName))
-    FileName = sort({FileName}); end
+    FileName = sort({FileName}); 
+else
+    FileName = sort(FileName);
+end
 if(FileName{1} == 0)
     return; 
 end
