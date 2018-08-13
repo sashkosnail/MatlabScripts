@@ -1,4 +1,4 @@
-function b = sortkml(a)
+function points = sortkml(a)
     cells = struct2cell(a); %converts struct to cell matrix
     sortvals = cells(2,1,:); % gets the values of just the first field
     sortvals = reshape(sortvals, length(sortvals), 1);
@@ -7,5 +7,5 @@ function b = sortkml(a)
     bb=(regexpi(sortvals,'[0-9]+N','start'));
     bb = 0.5 * cellfun(@isempty, bb);
     [~, ix] = sort(aa+bb);
-    b = a(ix); %rearranges the original array
+    points = a(ix); %rearranges the original array
 end

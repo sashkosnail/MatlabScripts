@@ -1,12 +1,17 @@
 % a=kml2struct('Wimont_Best_HVSR_Points.kml');
 % b=sortkml(a);
-load('profile_layout.mat')
-points = [b(:).Lat; b(:).Lon]';
-dd=distance(repmat(points(1,:),length(points),1),points);
-[dd, ix] = sort(dd);
-dist = dd*x(end)/dd(end);
-points_by_distance = b(ix);
-point_altitude = interp1(ele(:,1), ele(:,2), dist);
+clear
+load('profile_layout2.mat')
+points_mat = [points(:).Lat; points(:).Lon; points(:).Altitude]';
+x = rock_drift(:,1);
+r = rock_drift(:,2);
+d = rock_drift(:,3);
+dist=distance(repmat(points_mat(north_point,1:2),length(points_mat),1),points_mat(:,1:2));
+[dist, ix] = sort(dist);
+dist = dist*x(end)/dist(end);
+points_by_distance = points(ix);
+DEM(:,1) = DEM(:,1)*x(end)/DEM(end,1);
+point_altitude = interp1(DEM(:,1), DEM(:,2), dist);
 figure(555);clf
 subaxis(1,1,1,'ML',0.03,'MB',0.05,'MT',0.02)
 profile(1) = patch([x; x(end); 0], [r; 0; 0],[53 42 134]/255); hold on
@@ -18,14 +23,15 @@ h(1).Color = [53 42 134]/255;
 h(2) = hatchfill(profile(2),'single',45,5);
 h(2).Color = [200 200 50]/255;
 
-a=plot(dist, point_altitude,'sk--', 'LineWidth', 1);
-plot(ele(:,1)*11.65/ele(end,1), ele(:,2),'k-', 'LineWidth', 1)
-text(dist'+0.2*(-1).^(1:length(dd)), ...
-    point_altitude'+4*(-1).^(1:length(dd)), ...
+plot(dist, point_altitude,'sr', 'LineStyle', 'none');
+% plot(dist, points_mat(:,3),'sr--', 'LineWidth', 1);
+plot(DEM(:,1), DEM(:,2),'k-', 'LineWidth', 1)
+text(dist'+0.2*(-1).^(1:length(dist)), ...
+    point_altitude'+4*(-1).^(1:length(dist)), ...
     {points_by_distance(:).Name},'HorizontalAlignment','center')
 
 grid on; grid minor
-axis([0 max(x) 100 400]);
-title(t)
-xlabel('Distance From W17N [km]');
+xlim([0 max(x)]);
+title(line_title)
+xlabel(sprintf('Distance From %s [km]',points(north_point).Name));
 ylabel('Altitude [masl]');
