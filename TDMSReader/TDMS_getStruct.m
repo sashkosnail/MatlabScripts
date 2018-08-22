@@ -80,5 +80,8 @@ switch structVersion
         t=temp.data{time_id}; 
         t={t(1:length(temp.data{time_id+1}))};
         temp.data(time_id) = t;
-        output = array2table(cell2mat(temp.data(metaStruct.isChan)')', 'VariableNames', temp.chanNames{1});
+        output.DATA = array2table(cell2mat(temp.data(metaStruct.isChan)')', 'VariableNames', temp.chanNames{1});
+        propV = temp.propValues{1,1};
+        propN = strrep(temp.propNames{1,1}, ' ', '');
+        output.Properties = cell2table(propV, 'VariableNames', propN);
 end

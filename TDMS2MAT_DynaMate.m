@@ -1,5 +1,5 @@
 % close all
-
+isTableCol = @(t, thisCol) ismember(thisCol, t.Properties.VariableNames);
 if((~exist('PathName', 'var'))|(PathName == 0)) %#ok<OR2>
         PathName = [pwd '\']; 
 end
@@ -50,21 +50,36 @@ for idx = 1:1:length(FileName)
     datfile = FileName{idx};
     disp('===============================================================');
     disp(datfile)
-    Dtable = TDMS_getStruct([PathName datfile],6);
+    TDMSStruct = TDMS_getStruct([PathName datfile],6);
+    Dtable = TDMSStruct.DATA;
     datfile = datfile(1:find(datfile=='.', 1, 'last')-1);
         
     %extract data from data file
     t = Dtable{:,1}; Fs = 1/(t(2)-t(1));
     data = Dtable{:,data_channels};
-    D = [t data];
+    D = [t data-ones(length(data),1)*mean(data);];
     %Extract confguration information
     config = Dtable{:,26:end};
     FILTERS = [32,64,128];
-    SCALES_STR = {'0.1mm/s', 'Calibration', '100mm/s', '10mm/s', '1mm/s'};
-    scale_selected = round(mean(config(:,end)))+1;
-    filt_selected = FILTERS(round(mean(config(:,end-1)))-1);
-    disp(['Filter Selected: ', num2str(filt_selected), ...
-        'Hz || Scale Selected: ', SCALES_STR{scale_selected}]);
+    SCALES_STR1 = {'0.1mm/s', 'Calibration', '100mm/s', '10mm/s', '1mm/s'};
+    SCALES_STR2 = {'Calibration', '100mm/s', '10mm/s', '1mm/s', '0.1mm/s', '0.01mm/s'};
+    
+    if(~isTableCol(TDMSStruct.Properties, 'DAQVersion'))
+        oldDAQ = strcmpi('Y', input('OldDaqData [Y]:','s'));
+    else
+        oldDAQ = strcmp(TDMSStruct.Properties.DAQVersion, '1.0');
+    end
+    if(oldDAQ)
+        scale_selected = round(mean(config(:,end)))+1;
+        SCALE = SCALES_STR1{scale_selected};
+    else
+        scale_selected = round(mean(config(:,end)));
+        SCALE = SCALES_STR2{scale_selected};
+    end
+    filt_selected = round(mean(config(:,end-1)))-1;
+    
+    disp(['Filter Selected: ', num2str(FILTERS(filt_selected)), ...
+        'Hz || Scale Selected: ', SCALE]);
     disp(['Sample Rate: ', num2str(Fs), 'Hz ', ...
         '|| Signal Duration: ', num2str(t(end)-t(1)+1/Fs),'s']);
 
@@ -80,7 +95,7 @@ for idx = 1:1:length(FileName)
     %remove offset
     data = (data-ones(length(data),1)*mean(data));
     %secondary filter based on recording filter cutoff
-    filter_cutoff = filt_selected;
+    filter_cutoff = FILTERS(filt_selected);
     [fnum, fden] = butter(8, filter_cutoff*2/Fs, 'low');
     data = filtfilt(fnum, fden, data);
     
@@ -89,13 +104,13 @@ for idx = 1:1:length(FileName)
     disp(STATS);
     
     %plot signals
-    fig_name = datfile(1:find(datfile=='_', 1, 'first')-1);
+    fig_name = datfile;
     fig = plot_sensor_data(D, fig_name, names);
     
     %build result table and display/save results
 	Dtable = array2table(D, 'VariableNames', [{'Time'}, names]);
     save_data = 'Y'; %#ok<NASGU>
-    save_data = upper(input('Save Data Y/N [Y]:','s'));
+%     save_data = upper(input('Save Data Y/N [Y]:','s'));
     if isempty(save_data)
         save_data = 'Y'  %#ok<NOPTS>
     end
