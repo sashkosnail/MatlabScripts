@@ -16,6 +16,6 @@ function [t, data, offset] = build_test_data(filename)
     zz = [zz; n'*10/(Fs*10)];
     xx = 10*(exp(((1:1:length(data))/length(data)).^20)-1); 
     xx = xx';
-    offset = xx;
+    offset = zz;
     data = data + offset;
 end

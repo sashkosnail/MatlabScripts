@@ -3,7 +3,7 @@ function M = movmean(A, k, dim)
         dim = 1;
     end
     if(length(k)==1); w = ones(k,1); else w = k; end
-    w = w/sum(w);
+    w = reshape(w,length(w),1)/sum(w);
     K = length(w);
     M = zeros(size(A));
     minVal = ceil(K/2);
@@ -25,6 +25,7 @@ function M = movmean(A, k, dim)
             W = W/sum(W);
         end
 %         disp([num2str(start_id) ' ' num2str(end_id) '||' num2str(W')])
+        W = repmat(W, 1, size(A,2));
         M(n,:) = sum(A(start_id:end_id,:) .* W, dim);
     end
 end
