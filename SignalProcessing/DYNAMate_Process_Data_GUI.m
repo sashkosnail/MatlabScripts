@@ -1,5 +1,6 @@
+%UI setup
 function DYNAMate_Process_Data_GUI(varargin)
-global PathName tab_group   
+global OUTPUT PathName tab_group   
     if(~exist('PathName', 'file'))
         PathName = [pwd '\']; 
     end
@@ -11,10 +12,182 @@ global PathName tab_group
     
     tab_group = uitabgroup('Parent', fig, 'Units', 'normalized', ...
         'Position', [0 0, 1, 1], 'SelectionChangedFcn', @tab_changed_callback);
-    open_button = uicontrol('Parent', tab_group, 'Style', 'pushbutton', ...
-        'Units', 'normalized', 'Position', [0.95 0.95 0.05 0.05], ...
-        'Callback', open_file_callback, 'String', 'Open', ...
-        'ToolTipString', 'Open'); %#ok<NASGU>
+    
+    [FileName, PathName, ~] = uigetfile([PathName, '*.tdms'], ...
+        'Pick File','MultiSelect','on');
+    if(~iscell(FileName))
+        FileName = {FileName}; end
+    if(FileName{1} == 0)
+        return; 
+    end
+    OUTPUT.Source_FileName = FileName;
+    read_Data();
+end
+
+function createNewTab(idx)
+global OUTPUT tab_group
+    tab = uitab('Parent', tab_group, 'Title', OUTPUT.Data{idx}.FileName);
+    
+    signal_length = OUTPUT.Data{idx}.SignalNSamples;
+    num_sensors = OUTPUT.Data{idx}.Nsensors;
+    %create parameters
+    window_size = min(4096, 2^(nextpow2(signal_length)-1));
+    smoothN = 31;
+    
+    %create UI controls
+    overview_text = uitable('Parent', tab);
+    overview_text.Data = table2cell(OUTPUT.Data{idx}.ConfigTable(:,2:end));
+    overview_text.ColumnName = OUTPUT.Data{idx}.ConfigTable.Properties.VariableNames(2:end);
+    overview_text.ColumnWidth = {70, 70, 40, 60, 60, 50, 40, 40};
+    overview_text.Units = 'normalized';
+    overview_text.Position = [0.75 0.92 0.25 0.05];
+    overview_text.RowName = [];
+    overview_text.Units = 'pixels';
+    overview_text.Position(3:4) = [431 75];
+    overview_text.Units = 'normalized';
+    
+    time_text = uicontrol('Parent', tab, 'Style', 'text', ...
+        'Units', 'normalized', 'Position', [0.075 0.98 0.075 0.02], ...
+        'String', 'Window Center Time:', 'HorizontalAlignment', 'right'); %#ok<NASGU>
+    time_tb = uicontrol('Parent', tab, 'Style', 'edit', ...
+        'Units', 'normalized', 'Position', [0.15 0.98 0.05 0.02], ...
+        'KeyReleaseFcn', @time_tb_callback, ...
+        'ToolTipString', 'Window Center Time');
+    
+    window_size_text = uicontrol('Parent', tab, 'Style', 'text', ...
+        'Units', 'normalized', 'Position', [0.2 0.98 0.075 0.02], ...
+        'String', 'Frame Size:', 'HorizontalAlignment', 'right'); %#ok<NASGU>
+    window_size_tb = uicontrol('Parent', tab, 'Style', 'edit', ...
+        'Units', 'normalized', 'Position', [0.275 0.98 0.05 0.02], ...
+        'KeyReleaseFcn', @window_size_tb_callback, 'String', num2str(window_size), ...
+        'ToolTipString', 'Frame Size'); %#ok<NASGU>
+    
+    window_type_text = uicontrol('Parent', tab, 'Style', 'text', ...
+        'Units', 'normalized', 'Position', [0.35 0.98 0.07 0.02], ...
+        'String', 'Frame Window Type:', 'HorizontalAlignment', 'right'); %#ok<NASGU>
+    window_type_cb = uicontrol('Parent', tab, 'Style', 'checkbox', ...
+        'Units', 'normalized', 'Position', [0.42 0.98 0.08 0.02], ...
+        'Callback', @hamming_cb_callback, 'Value', 1, ...
+        'ToolTipString', 'Apply Hamming to Window', ...
+        'String', 'Apply Hamming Window'); %#ok<NASGU>
+    
+    smoothN_text = uicontrol('Parent', tab, 'Style', 'text', ...
+        'Units', 'normalized', 'Position', [0.5 0.98 0.075 0.02], ...
+        'String', 'FFT Smooting Window Size:', 'HorizontalAlignment', 'right'); %#ok<NASGU>
+    smoothN_tb = uicontrol('Parent', tab, 'Style', 'edit', ...
+        'Units', 'normalized', 'Position', [0.575 0.98 0.05 0.02], ...
+        'KeyReleaseFcn', @smoothN_tb_callback, 'String', num2str(smoothN), ...
+        'ToolTipString', 'Spectrum Smooth Box Size'); %#ok<NASGU>
+    
+    save_button = uicontrol('Parent', tab, 'Style', 'pushbutton', ...
+        'Units', 'normalized', 'Position', [0 0.98 0.05 0.02], ...
+        'Callback', @savebutton_callback, 'String', 'Save Data', ...
+        'ToolTipString', 'Save'); %#ok<NASGU>
+    
+    %create axis
+    full_plot_axis = subplot('Position', [0.015 0.89 0.71 0.07], 'Parent', tab);
+    plot_vert_size = 0.875/(num_sensors*1.05);
+    ch_axis = cell(num_sensors, 1);
+    for id = 0:1:num_sensors - 1
+        ch_axis{id+1}.SignalAxis = subplot('Position', ...
+            [0.015, plot_vert_size*id+0.05, 0.71, plot_vert_size], ...
+            'Xgrid', 'on', 'Ygrid', 'on', 'Color', 'w');
+        ch_axis{id+1}.SpectrumAxis = subplot('Position', ...
+            [0.75, plot_vert_size*id+0.05, 0.245, plot_vert_size], ...
+            'Xgrid', 'on', 'Ygrid', 'on', 'Color', 'w');
+    end
+    
+    %set user data object
+    tab.UserData = struct('window_size', window_size, ...
+        'smoothN', smoothN, 'CurrentWindow', [1 window_size], ...
+        'applyHamming', 1, 'DataIDX', idx, 'AccVelDisp', 1, ...
+        'FullPlot', full_plot_axis, 'ChannelAxis', {ch_axis}, ...
+        'VertBars', [], 'VertBarsH', [], 'TimeTB', time_tb);
+    
+    %plot data
+    plot_tab_data(tab);
+end
+
+%Read Data
+function read_Data()
+global PathName OUTPUT
+    isTableCol=@(t, thisCol) ismember(thisCol, t.Properties.VariableNames);
+    OUTPUT.Data = cell(length(OUTPUT.Source_FileName),1);
+    for idx = 1:1:length(OUTPUT.Source_FileName)
+        datfile = OUTPUT.Source_FileName{idx};        
+        TDMSStruct = TDMS_getStruct([PathName datfile],6);
+        
+        if(~isTableCol(TDMSStruct.Properties, 'DAQVersion'))
+            answer = questdlg('Is data from DYNAMate V1.0?', ...
+                'Cannot Determine HW version', 'Yes', 'No', 'No');
+            if(strcmpi('Yes', answer))
+                DAQVersion = '1.0';
+            else
+                DAQVersion = 'N/A';
+            end
+        else
+            DAQVersion = TDMSStruct.Properties.DAQVersion;
+        end
+        if(~isTableCol(TDMSStruct.Properties, 'SoftwareVersion'))
+            SWVersion = 'N/A';
+        else
+            SWVersion = TDMSStruct.Properties.SoftwareVersion;
+        end
+        oldDAQ = strcmp(TDMSStruct.Properties.DAQVersion, '1.0');
+        
+        read_sensor_config();
+
+        %extract data from data file
+        Dtable = TDMSStruct.DATA;
+        Fs = 1/(Dtable{2,1}-Dtable{1,1});
+        duration = Dtable{end,1}-Dtable{1,1}+1/Fs;
+        DATA = Dtable{:,[1 OUTPUT.Sensor_configuration.DataChannels]};
+        CONFIG = Dtable{:,26:end};
+        
+        %Extract confguration information
+        FILTERS = [32,64,128];
+        FILTERS_str = {'32Hz','64Hz','128Hz'};
+        SCALES_1 = [0.1, 0, 100, 10, 1];
+        SCALES_str1 = {'0.1mm/s', 'Calibration', '100mm/s', '10mm/s', '1mm/s'};
+        SCALES_2 = [0, 100, 10, 1, 0.1, 0.01];
+        SCALES_str2 = {'Calibration', '100mm/s', '10mm/s', '1mm/s', '0.1mm/s', '0.01mm/s'};
+
+        scale_selected = round(mean(CONFIG(:,end)));
+        filter_selected = round(mean(CONFIG(:,end-1)))-1;
+        if(oldDAQ)
+            scale_selected = scale_selected + 1;
+            SCALE_str = SCALES_str1{scale_selected};
+            SCALE = SCALES_1(scale_selected);
+        else
+            SCALE_str = SCALES_str2{scale_selected};
+            SCALE = SCALES_2(scale_selected);
+        end
+        
+        OUTPUT.Data{idx}.FileName = datfile;
+        OUTPUT.Data{idx}.SW_version = SWVersion;
+        OUTPUT.Data{idx}.DAQ_version = DAQVersion;
+        OUTPUT.Data{idx}.Fs = Fs;
+        OUTPUT.Data{idx}.SignalDuration = duration;
+        OUTPUT.Data{idx}.SignalNSamples = length(DATA);
+        OUTPUT.Data{idx}.DATA.Velocity = DATA(:,2:end);
+        OUTPUT.Data{idx}.DATA.Acceleration = zeros(size(DATA(:,2:end)));
+        OUTPUT.Data{idx}.DATA.Displacement = zeros(size(DATA(:,2:end)));
+        OUTPUT.Data{idx}.DATA.Time = DATA(:,1);
+        OUTPUT.Data{idx}.Stats = signal_stats(DATA, OUTPUT.Sensor_configuration.Names);
+        OUTPUT.Data{idx}.ScaleSTR = SCALE_str;
+        OUTPUT.Data{idx}.FilterSTR = FILTERS_str(filter_selected);
+        OUTPUT.Data{idx}.Scale = SCALE;
+        OUTPUT.Data{idx}.Filter = FILTERS(filter_selected);
+        OUTPUT.Data{idx}.Nsensors = height(OUTPUT.Sensor_configuration.Table);
+        OUTPUT.Data{idx}.ConfigTable = struct2table(struct(...
+            'FileName', datfile, 'DAQVersion', DAQVersion, ...
+            'SWVersion', SWVersion, 'Fs', Fs, 'NSamples', length(DATA), ...
+            'Duration', duration, ...
+            'Sensors', OUTPUT.Data{idx}.Nsensors, ...
+            'Filter', FILTERS_str(filter_selected), 'Scale', SCALE_str));
+        
+        createNewTab(idx);
+    end
 end
 
 function read_sensor_config()
@@ -50,7 +223,7 @@ global PathName OUTPUT
     end
     sensor_config = [sensor_config(active_ids,:) ...
         table(reshape(data_channels,3,[])', 'VariableNames', {'ColumnsUsed'})];
-    names = cellfun(@(c,i) strcat(num2str(i), {'_X_';'_Y_';'_Z_'}, c), ...
+    names = cellfun(@(c,i) strcat(c, {'_X_';'_Y_';'_Z_'}, num2str(i)), ...
         sensor_names, num2cell(active_ids)', 'uni', 0);
     names = vertcat(names{:})';
     
@@ -62,143 +235,11 @@ global PathName OUTPUT
     disp(sensor_config);
 end
 
-function read_Data()
-global PathName OUTPUT
-    isTableCol=@(t, thisCol) ismember(thisCol, t.Properties.VariableNames);
-    OUTPUT.Data = cell(length(OUTPUT.Source_FileName),1);
-    for idx = 1:1:length(OUTPUT.Source_FileName)
-        datfile = OUTPUT.Source_FileName{idx};        
-        TDMSStruct = TDMS_getStruct([PathName datfile],6);
-        Dtable = TDMSStruct.DATA;
-
-        %extract data from data file
-        Fs = 1/(Dtable{2,1}-Dtable{1,1});
-        duration = Dtable{end,1}-Dtable{1,1}+1/Fs;
-        DATA = Dtable(:,[1 OUTPUT.Sensor_configuration.DataChannels]);
-        CONFIG = Dtable(:,26:end);
-        
-        %Extract confguration information
-        FILTERS = [32,64,128];
-        FILTERS_str = {'32','64','128'};
-        SCALES_1 = [0.1, 0, 100, 10, 1];
-        SCALES_str1 = {'0.1mm/s', 'Calibration', '100mm/s', '10mm/s', '1mm/s'};
-        SCALES_2 = [0, 100, 10, 1, 0.1, 0.01];
-        SCALES_str2 = {'Calibration', '100mm/s', '10mm/s', '1mm/s', '0.1mm/s', '0.01mm/s'};
-
-        if(~isTableCol(TDMSStruct.Properties, 'DAQVersion'))
-            oldDAQ = strcmpi('Y', input('OldDaqData [Y]:','s'));
-        else
-            oldDAQ = strcmp(TDMSStruct.Properties.DAQVersion, '1.0');
-        end
-        scale_selected = round(mean(CONFIG(:,end)));
-        filter_selected = round(mean(CONFIG(:,end-1)))-1;
-        if(oldDAQ)
-            scale_selected = scale_selected + 1;
-            SCALE_str = SCALES_str1{scale_selected};
-            SCALE = SCALES_1(scale_selected);
-        else
-            SCALE_str = SCALES_str2{scale_selected};
-            SCALE = SCALES_2(scale_selected);
-        end
-        
-        SWVersion = TDMSStruct.Properties.Software_Version;
-        DAQVersion = TDMSStruct.Properties.DAQVersion;
-        
-        OUTPUT.Data{idx}.Filename = datfile;
-        OUTPUT.Data{idx}.SW_version = SWVersion;
-        OUTPUT.Data{idx}.DAQ_version = DAQVersion;
-        OUTPUT.Data{idx}.Fs = Fs;
-        OUTPUT.Data{idx}.SignalDuration = duration;
-        OUTPUT.Data{idx}.SignalNSamples = length(DATA);
-        OUTPUT.Data{idx}.DATA.Velocity = DATA(:,2:end);
-        OUTPUT.Data{idx}.DATA.Acceleration = zeros(size(DATA(:,2:end)));
-        OUTPUT.Data{idx}.DATA.Displacement = zeros(size(DATA(:,2:end)));
-        OUTPUT.Data{idx}.DATA.Time = DATA(:,1);
-        OUTPUT.Data{idx}.Stats = signal_stats(table2array(Dtable), OUTPUT.Sensor_configuration.Names);
-        OUTPUT.Data{idx}.ScaleSTR = SCALE_str;
-        OUTPUT.Data{idx}.FilterSTR = FILTERS_str(filter_selected);
-        OUTPUT.Data{idx}.Scale = SCALE;
-        OUTPUT.Data{idx}.Filter = FILTERS(filter_selected);
-        OUTPUT.Data{idx}.ConfigTable = struct2table(struct(...
-            'FileName', datfile, 'DAQVersion', DAQVersion, ...
-            'Fs', Fs, 'SignalDuration',duration, 'NSamples',length(DATA)));
-        
-        createNewTab(idx);
-    end
-end
-
-function createNewTab(idx)
-global OUTPUT tab_group
-    tab = uitab('Parent', tab_group, 'Title', OUTPUT.Data{idx}.FileName);
-    
-    signal_length = OUTPUT.Data{idx}.SignalNSamples;
-    num_sensors = size(data,2)/3;
-    %create parameters
-    window_size = 4096;
-    smoothN = 31;
-    
-    %create UI controls
-    time_tb = uicontrol('Parent', tab, 'Style', 'edit', ...
-        'Units', 'normalized', 'Position', [0.72 0.98 0.05 0.02], ...
-        'KeyReleaseFcn', time_tb_callback, ...
-        'ToolTipString', 'Window Center Time');
-    
-    time_slider = uicontrol('Parent', tab, 'Style', 'slider', ...
-        'Value', 0, 'Min', 0, 'Max', signal_length-window_size, ...
-        'Units', 'normalized', 'Position', [0 0.98 0.72 0.02], ...
-        'SliderStep', [0.001 0.001], 'Callback', slider_moved_callback, ...
-        'ToolTipString', 'Time Slider', 'UserData', time_tb);
-    
-    window_size_tb = uicontrol('Parent', tab, 'Style', 'edit', ...
-        'Units', 'normalized', 'Position', [0.9 0.98 0.05 0.02], ...
-        'KeyReleaseFcn', window_size_tb_callback, 'String', num2str(window_size), ...
-        'ToolTipString', 'Window Size'); %#ok<NASGU>
-    
-    hamming_cb = uicontrol('Parent', tab, 'Style', 'checkbox', ...
-        'Units', 'normalized', 'Position', [0.77 0.98 0.08 0.02], ...
-        'Callback', hamming_cb_callback, 'Value', 1, ...
-        'ToolTipString', 'Apply Hamming to Window', ...
-        'String', 'Apply Hamming Window'); %#ok<NASGU>
-    
-    smoothN_tb = uicontrol('Parent', tab, 'Style', 'edit', ...
-        'Units', 'normalized', 'Position', [0.85 0.98 0.05 0.02], ...
-        'KeyReleaseFcn', smoothN_tb_callback, 'String', num2str(smoothN), ...
-        'ToolTipString', 'Spectrum Smooth Box Size'); %#ok<NASGU>
-    
-    save_button = uicontrol('Parent', tab, 'Style', 'pushbutton', ...
-        'Units', 'normalized', 'Position', [0.95 0.98 0.05 0.02], ...
-        'Callback', savebutton_callback, 'String', 'Save Data', ...
-        'ToolTipString', 'Save'); %#ok<NASGU>
-    
-    %create axis
-    full_plot_axis = subplot('Parent', tab, 'Position', [0 0.87 1 0.09]);
-    plot_vert_size = 0.91/num_sensors*.9;
-    ch_axis = cell(num_sensors, 1);
-    for idx = 0:1:num_sensors - 1
-        ch_axis{idx}.SignalAxis = subplot('Position', ...
-            [0.015, plot_vert_size*idx+0.05, 0.71, plot_vert_size], ...
-            'Xgrid', 'off', 'Ygrid', 'off', 'Color', 'w');
-        ch_axis{idx}.SpectrumAxis = subplot('Position', ...
-            [0.75, plot_vert_size*idx+0.05, 0.245, plot_vert_size], ...
-            'Xgrid', 'off', 'Ygrid', 'off', 'Color', 'w'); 
-    end
-    
-    %set user data objects
-    time_slider.UserData = struct('Plot', full_plot_axis, ...
-        'TimeTB', time_tb);
-    tab.UserData = struct('window_size', window_size, ...
-        'smoothN', smoothN, 'CurrentWindow', [0 window_size], ...
-        'applyHamming', 1, 'DataIDX', idx, 'AccVelDisp', 1, ...
-        'FullPlot', full_plot_axis, 'ChannelAxis', ch_axis, ...
-        'VertBars', [], 'TimeSlider', time_slider);
-    
-    %plot data
-    plot_tab_data(tab);
-end
-
+%Plot Data
 function plot_tab_data(tab)
 global OUTPUT
     idx = tab.UserData.DataIDX;
+    t = OUTPUT.Data{idx}.DATA.Time;
     switch tab.UserData.AccVelDisp
         case 0
             data = OUTPUT.Data{idx}.DATA.Acceleration;
@@ -207,24 +248,26 @@ global OUTPUT
         otherwise
             data = OUTPUT.Data{idx}.DATA.Velocity;
     end
-    ax = tab.UserData.full_plot_axis;
     
-    plot(data, 'ButtonDownFcn', full_plot_callback, 'Parent', ax);
-    grid on; hold on; axis tight
-    set(gca, 'Color', 'w', 'GridColor', 'k', 'XAxisLocation', 'top');
+    ax = tab.UserData.FullPlot;
+    y_limits = [min(min(data)); max(max(data))]; 
+    tab.UserData.VertBarsH = [y_limits y_limits];
+    plot(t, data, 'ButtonDownFcn', @full_plot_callback, 'Parent', ax);
+    set(ax, 'Color', 'w', 'XAxisLocation', 'top', 'NextPlot', 'add', ...
+        'XGrid', 'on', 'YGrid', 'on', 'GridColor', 'k', 'TickDir', 'in', ...
+        'GridLineStyle', ':', 'XLim', [t(1) t(end)], 'Ylim', y_limits); 
     
     plot_vert_bars(tab);
-    
-    for idx = 0:1:num_sensors - 1
-        plot_channel_data(tab)
-    end
+    plot_channel_data(tab)
 end
 
 function plot_channel_data(tab)
 global OUTPUT
     idx = tab.UserData.DataIDX;
+    N = tab.UserData.window_size;
+    Fs = OUTPUT.Data{idx}.Fs;
     window_data_id = tab.UserData.CurrentWindow(1):1:tab.UserData.CurrentWindow(2);
-    t=window_data_id/OUTPUT.Data{idx}.Fs;
+    t=(window_data_id-1)/OUTPUT.Data{idx}.Fs;
     chanNames = OUTPUT.Sensor_configuration.Names;
     switch tab.UserData.AccVelDisp
         case 0
@@ -234,50 +277,56 @@ global OUTPUT
         otherwise
             data = OUTPUT.Data{idx}.DATA.Velocity(window_data_id,:);
     end
-    data_range = [-1 1].*max(max(abs(data)));
-    text_locations = [0.75 0 -0.75]*data_range(2)*.75;
-    peak_data = find_Vpp_window(data);
-    VppTable = zeros(1, 24);
-
+    
+    num_sensors = OUTPUT.Data{idx}.Nsensors;
+    ax=[]; %#ok<NASGU>
     for idx = 0:1:num_sensors - 1
         data_id = ((num_sensors -1 - idx)*3 + 1):((num_sensors - idx)*3);
-        ax = tab.UserData.ChannelAxis{idx}.SignalAxis;
+        %signal
+        ax = tab.UserData.ChannelAxis{idx+1}.SignalAxis;
+        cla(ax);
         plot(t,data(:,data_id), 'LineWidth', 1, 'Parent', ax);
-        grid on; hold on
         set(ax, 'Color', 'w', 'GridColor', 'k', 'XLim', [t(1) t(end)], ...
-            'XAxisLocation', 'bottom');
+            'XAxisLocation', 'bottom', 'NextPlot', 'add', ...
+        'XGrid', 'on', 'YGrid', 'on', 'GridColor', 'k', ...
+        'GridLineStyle', '-', 'YLim', [-1 1].*max(max(abs(data))));
         
         if(idx==0)
             ax.XAxis.Visible = 'on';
-            lbl=xlabel('Time[s]');
-            set(lbl, 'Units', 'normalized','Position',[0.5 0.2 0]);
+            ax.XLabel = text('Units', 'normalized', 'Parent', ax, ...
+                'Position', [0.5 0.1 0], 'String', 'Time[s]');
         else
-            ax.XAxis.Visible = 'off';
+            ax.XAxis.TickLabels = [];
         end
-        
+        %Peaks      
         colors = [217 83 25; 0 114 189; 237 177 32]./255;
+        
+        peak_data = find_Vpp_window(data);
+        VppTable = zeros(1, 24);
+        Vpp_string = '';
         for comp_id = 1:1:3
             idc = (num_sensors - 1 - idx)*3+comp_id;
             mVpp_idx = peak_data(idc,:);
             maxVpp = sum(abs(data(mVpp_idx,idc)));
             VppTable(idc) = maxVpp;
-            plot(t(mVpp_idx), window_data(mVpp_idx, idc), 'LineStyle', 'none', ...
-                'Marker','d','MarkerFaceColor', colors(comp_id,:))
-            text(t(10), text_locations(comp_id), ...
-            ['Vpp[', chanNames{idc},'][mm/s]=', num2str(maxVpp,'%5.3f')], ...
-                'Color', 'k', 'BackgroundColor',[0.9 0.9 0.9]);
-        end
-        hold off
-        ylim(data_range)
-        
+            plot(t(mVpp_idx), data(mVpp_idx, idc), 'LineStyle', 'none', ...
+                'Marker','d','MarkerFaceColor', colors(comp_id,:), ...
+                'Parent', ax)
+            Vpp_string = sprintf('%sVpp[%s][mm/s]=%5.3f\n', ...
+                Vpp_string, chanNames{idc}, maxVpp);
+        end 
+        text(t(20), mean(ax.YLim), Vpp_string(1:end-1), 'Color', 'k', ...
+            'BackgroundColor',[0.9 0.9 0.9], 'Parent', ax);
+        %Spectrum
         applyHamming = tab.UserData.applyHamming;
         specSmoothN = tab.UserData.smoothN;
         if(applyHamming)
-            window_function = repmat(hamming(N), 1, size(data,2));
+            window_function = repmat(hamming(N), ...
+                1, size(data,2));
         else
             window_function = ones(N,size(data,2));
         end
-        fftdata = abs(fft(data.*window_function, N, 1)/(N-1));
+        fftdata = abs(fft(data.*window_function, N, 1));
         fftdata = abs(fftdata(ceil(1:N/2),:));
         fftdata(2:end-1,:) = 2*fftdata(2:end-1,:);
         if(specSmoothN == 1)
@@ -288,92 +337,117 @@ global OUTPUT
         f = Fs*(1:N/2)'/N;
         fft_range = [min(min(abs(fftdata_filt))) max(max(abs(fftdata_filt)))];
         
-        ax = tab.UserData.ChannelAxis{idx}.SpectrumAxis;
+        ax = tab.UserData.ChannelAxis{idx+1}.SpectrumAxis;
+        cla(ax);
         loglog(f,abs(fftdata_filt(:,data_id)), 'LineWidth', 1, ...
             'Parent', ax);
-        grid on; 
-        set(gca, 'Color', 'w', 'GridColor', 'k', ...
-            'XAxisLocation', 'bottom');
+        set(ax, 'Color', 'w', 'GridColor', 'k', ...
+            'XAxisLocation', 'bottom', 'NextPlot', 'add', ...
+            'XGrid', 'on', 'YGrid', 'on', 'GridLineStyle', '-', ...
+            'GridColor', 'k', 'YLim', fft_range, 'YTick', 10.^(-4:1:4), ...
+            'XLim', [f(1), f(end)], 'XTick', [0.1 1 10 100]);
+
         if(idx==0)
             ax.XAxis.Visible = 'on';
-            lbl = xlabel('Frequency[Hz]');
-            set(lbl, 'Units', 'normalized','Position',[0.5 0.2 0]);
+            ax.XLabel = text('Units', 'normalized', 'Parent', ax, ...
+                'Position', [0.5 0.1 0], 'String', 'Frequency[Hz]');
         else
-            ax.XAxis.Visible = 'off';
-        end
-        ylim(fft_range)
-        xlim([f(1), f(end)]);
-        set(gca, 'YTick', [0.001 1], 'XTick',[0.1 1 10 100]);
+            ax.XAxis.TickLabels = [];
+        end        
     end
+    axes(ax);
     l = legend('X','Y','Z');
     l.TextColor = 'k';
-    l.Location = 'south';
+    l.Location = 'NorthWest';
 end
 
 function plot_vert_bars(tab)
 global OUTPUT
-    idx = tab.UserData.DataIDX;
-    window_data_id = tab.UserData.CurrentWindow(1):1:tab.UserData.CurrentWindow(2);
-    t=window_data_id/Fs;
-    switch tab.UserData.AccVelDisp
-        case 0
-            data = OUTPUT.Data{idx}.DATA.Acceleration(window_data_id,:);
-        case 2
-            data = OUTPUT.Data{idx}.DATA.Displacement(window_data_id,:);
-        otherwise
-            data = OUTPUT.Data{idx}.DATA.Velocity(window_data_id,:);
-    end
+    Fs = OUTPUT.Data{tab.UserData.DataIDX}.Fs;
     %establish and draw window
-    vert_bars_t = [t(1) t(end)];
+    vert_bars_t = (tab.UserData.CurrentWindow-1)/Fs;
     vert_bars_t = [vert_bars_t; vert_bars_t];
-    vert_bars_h = [min(min(data)); max(max(data))]; 
-    vert_bars_h = [vert_bars_h vert_bars_h];
+    vert_bars_h = tab.UserData.VertBarsH;
     
     delete(tab.UserData.VertBars)
     tab.UserData.VertBars = plot(vert_bars_t, vert_bars_h, ...
-        'Parent', tab.FullPlot, 'Color', 'r', 'LineWidth', 2, ...
+        'Parent', tab.UserData.FullPlot, 'Color', 'r', 'LineWidth', 2, ...
         'LineStyle','--');
 end
 
-%CALLBACKS
+function adjust_window(tab, center)
+global OUTPUT
+    N = tab.UserData.window_size;
+    idx = tab.UserData.DataIDX;
+    Fs = OUTPUT.Data{idx}.Fs;
+    L = OUTPUT.Data{idx}.SignalNSamples;
+    
+    if(center<0)
+        center = floor(mean(tab.UserData.CurrentWindow));
+    else
+        center = floor(center);
+    end
+
+    CurrentWindow = center + [-N/2+1 N/2];
+    if(CurrentWindow(1) < 1)
+        CurrentWindow = CurrentWindow + 1 - CurrentWindow(1);
+    elseif(CurrentWindow(2) > L)
+        CurrentWindow = CurrentWindow - CurrentWindow(2)+L;
+    end
+    tab.UserData.CurrentWindow = CurrentWindow;
+    tab.UserData.TimeTB.String = num2str(floor(mean(CurrentWindow))/Fs);
+    plot_vert_bars(tab)
+    plot_channel_data(tab);
+
+end
+
+%UI CALLBACKS
 function full_plot_callback(hObject, eventData)
 global OUTPUT
+    tab = hObject.Parent.Parent;
+    idx = tab.UserData.DataIDX;
+    L = OUTPUT.Data{idx}.SignalNSamples;
+    Wn = tab.UserData.window_size;
+    Fs = OUTPUT.Data{idx}.Fs;
+    
+    val = Fs*eventData.IntersectionPoint(1);
+    val = max(Wn/2, val);
+    val = min(L-Wn/2, val);
+    
+    adjust_window(tab, val);
+end
+
+function time_tb_callback(hObject, eventData)
+global OUTPUT
     tab = hObject.Parent;
-    time_slider = tab.UserData.TimeSlider;
-    Fs = OUTPUT.Data{tab.UserData.DataIDX}.Fs;
-    val = Fs*eventData.IntersectionPoint(1) - tab.UserData.window_size/2;
-    val = max(0, val);
-    val = min(time_slider.Max, val);
-    time_slider.Value = val;
-    slider_moved_callback(time_slider, 0);
+    if(~strcmp(eventData.Key, 'return'))
+        return;
+    end
+    
+    idx = tab.UserData.DataIDX;
+    L = OUTPUT.Data{idx}.SignalNSamples;
+    Wn = tab.UserData.window_size;
+    Fs = OUTPUT.Data{idx}.Fs;
+    
+    val = str2double(hObject.String)*Fs;
+    if(isnan(val))
+        return
+    end
+    
+    val = max(Wn/2, val);
+    val = min(L-Wn/2, val);
+    
+    adjust_window(tab, val);
 end
 
 function hamming_cb_callback(hObject, ~)
     tab = hObject.Parent;
-    time_slider = tab.UserData.TimeSlider;
     tab.UserData.applyHamming = hObject.Value;
-    slider_moved_callback(time_slider, 0);
-end
-
-function time_tb_callback(hObject, eventData)
-    tab = hObject.Parent;
-    time_slider = tab.UserData.TimeSlider;
-    if(~strcmp(eventData.Key, 'return'))
-        return;
-    end
-    val = str2double(hObject.String);
-    if(isnan(val))
-        return
-    end
-    val = max(0, val);
-    val = min(time_slider.Max, val);
-    time_slider.Value = val;
-    slider_moved_callback(time_slider, 0);
+    plot_channel_data(tab);
 end
 
 function smoothN_tb_callback(hObject, eventData)
     tab = hObject.Parent;
-    time_slider = tab.UserData.TimeSlider;
     if(~strcmp(eventData.Key, 'return'))
         return;
     end
@@ -382,55 +456,29 @@ function smoothN_tb_callback(hObject, eventData)
         return
     end
     tab.UserData.smoothN = val;
-    slider_moved_callback(time_slider, 0);
+    plot_channel_data(tab);
 end
 
 function window_size_tb_callback(hObject, eventData)
+global OUTPUT
     tab = hObject.Parent;
-    time_slider = tab.UserData.TimeSlider;
     if(~strcmp(eventData.Key, 'return'))
         return;
     end
+    idx = tab.UserData.DataIDX;
+    signal_length = OUTPUT.Data{idx}.SignalNSamples;
     val = str2double(hObject.String);
     if(isnan(val))
         return
     end
-    tab.UserData.window_size = val;
-    time_slider.Max = signal_length - val;
-    time_slider.Value = min(time_slider.Value, time_slider.Max);
-    slider_moved_callback(time_slider, 0);
-end
-
-function slider_moved_callback(hObject, ~)
-    tab = hObject.Parent;
-    time_slider = hObject;
-    time_slider.Value = floor(time_slider.Value);
-
-    hObject.UserData.String = num2str(time_slider.Value);
-    %get data subset
-    N = tab.UserData.window_size;
-    window_data_id = (1:1:N)+floor(time_slider.Value);
-    tab.UserData.CurrentWindow = [window_data_id(1) window_data_id(end)];
     
-    plot_vert_bars()
-    plot_channel_data();
+    val = min(val, signal_length);
+    tab.UserData.window_size = val;
+    hObject.String = num2str(val);
+    adjust_window(tab, -1);
 end
 
-function open_file_callback(~, ~)
-global PathName OUTPUT
-    [FileName, PathName, ~] = uigetfile([PathName, '*.tdms'], ...
-        'Pick File','MultiSelect','on');
-    if(~iscell(FileName))
-        FileName = {FileName}; end
-    if(FileName{1} == 0)
-        return; 
-    end
-    OUTPUT.Source_FileName = FileName;
-    read_sensor_config();
-    read_Data();
-end
-
-function savebutton_callback(hObject, ~, data)
+function savebutton_callback(~, ~)
     throw(MException('Incomplete','Incomplete'))
     fig = hObject.Parent;
     time_tb = hObject.UserData;
@@ -455,7 +503,7 @@ function savebutton_callback(hObject, ~, data)
     disp('Save Complete')
 end
 
-function tab_changed_callback(hObject, eventdata)
+function tab_changed_callback(~, ~)
 end
 
 
