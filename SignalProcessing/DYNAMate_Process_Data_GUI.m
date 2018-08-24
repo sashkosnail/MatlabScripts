@@ -22,6 +22,7 @@ global OUTPUT PathName tab_group wait_window
         FileName = {FileName}; end
     if(FileName{1} == 0)
         delete(wait_window)
+        delete(fig)
         return; 
     end
     OUTPUT.Source_FileName = FileName;
@@ -36,14 +37,14 @@ global OUTPUT tab_group wait_window file_progress total_progress
     signal_length = OUTPUT.Data{idx}.SignalNSamples;
     num_sensors = OUTPUT.Data{idx}.Nsensors;
     %create parameters
-    window_size = min(4096, 2^(nextpow2(signal_length)-1));
-    smoothN = 31;
+    window_size = min(4096, signal_length);
+    smoothN = 5;
     
     %create UI controls
     overview_text = uitable('Parent', tab);
     overview_text.Data = table2cell(OUTPUT.Data{idx}.ConfigTable(:,2:end));
     overview_text.ColumnName = OUTPUT.Data{idx}.ConfigTable.Properties.VariableNames(2:end);
-    overview_text.ColumnWidth = {70, 70, 40, 60, 60, 50, 40, 40, 40};
+    overview_text.ColumnWidth = {70, 60, 30, 60, 50, 50, 40, 40, 60};
     overview_text.Units = 'normalized';
     overview_text.Position = [0.75 0.92 0.25 0.05];
     overview_text.RowName = [];
@@ -82,7 +83,7 @@ global OUTPUT tab_group wait_window file_progress total_progress
         'String', 'Frame Window Type:', 'HorizontalAlignment', 'right'); %#ok<NASGU>
     window_type_cb = uicontrol('Parent', tab, 'Style', 'checkbox', ...
         'Units', 'normalized', 'Position', [0.52 0.98 0.08 0.02], ...
-        'Callback', @hamming_cb_callback, 'Value', 1, ...
+        'Callback', @hamming_cb_callback, 'Value', 0, ...
         'ToolTipString', 'Apply Hamming to Window', ...
         'String', 'Apply Hamming Window'); %#ok<NASGU>
     
@@ -110,7 +111,7 @@ global OUTPUT tab_group wait_window file_progress total_progress
     %set user data object
     tab.UserData = struct('window_size', window_size, 'Units', '[mm/s]', ...
         'smoothN', smoothN, 'CurrentWindow', [1 window_size], ...
-        'applyHamming', 1, 'DataIDX', idx, 'AccVelDisp', 2, ...
+        'applyHamming', 0, 'DataIDX', idx, 'AccVelDisp', 2, ...
         'FullPlot', full_plot_axis, 'ChannelAxis', {ch_axis}, ...
         'VertBars', [], 'VertBarsH', [], 'TimeTB', time_tb);
     if(isvalid(wait_window))
@@ -266,9 +267,6 @@ global PathName OUTPUT
     OUTPUT.Sensor_configuration.SensorNames = sensor_names;
     OUTPUT.Sensor_configuration.SensorID = sensor_ids;
     OUTPUT.Sensor_configuration.DataChannels = data_channels;
-    
-    disp('Using Sensor Configuration:');
-    disp(sensor_config);
 end
 
 function processData(idx)
@@ -287,10 +285,11 @@ global OUTPUT wait_window total_progress file_progress
             [wait_window.UserData 'Removing Trend and Offset']);
     end
     %remove trend and offset
-    window = hanning(floor(Nw*length(data)));
-    window = repmat(window'/sum(window),1,3);
-    mvmean = movmean(data,window);
-    offset = movmean(mvmean,ones(Nf,1)/Nf); 
+%     window = hanning(floor(Nw*length(data)));
+%     window = repmat(window'/sum(window),1,3);
+%     mvmean = movmean(data,window);
+%     offset = movmean(mvmean,ones(Nf,1)/Nf); 
+    offset = repmat(mean(data),length(data),1);
     data = data - offset;
     %Apply taper
     taper = build_taper(t, taper_tau);
@@ -310,32 +309,69 @@ global OUTPUT wait_window total_progress file_progress
         OUTPUT.Data{idx}.ConfigTable.SensorFc = targetFc;
     end
     
-    
     if(isvalid(wait_window))
-        waitbar(total_progress + file_progress*0.6, wait_window, ...
+        waitbar(total_progress + file_progress*0.55, wait_window, ...
             [wait_window.UserData 'Calculating Acceleration and Displacement']);
     end
     %Calculate Acceleration and Displacement
     dsp = cumtrapz(t, data); 
-    dfm = cumtrapz(t, dsp)*0.5./repmat((t+Ts),1 ,size(data,2));
+    dfm = cumtrapz(t, dsp)*0.5./repmat((t+Ts),1 ,size(data,2));    
     
+    %set data to output
     OUTPUT.Data{idx}.DATA.Velocity = data; %[mm/s]
     OUTPUT.Data{idx}.DATA.Acceleration = [zeros(1, size(data,2)); ...
         diff(data/1000)/Ts]; %[m/s^2]
     OUTPUT.Data{idx}.DATA.Displacement = dsp-dfm; %[mm]
+    
+    %peak to peak data
+    if(isvalid(wait_window))
+        waitbar(total_progress + file_progress*0.6, wait_window, ...
+            [wait_window.UserData 'Finding Peak to Peak Values']);
+    end
+    peak_vel = find_Vpp_window(OUTPUT.Data{idx}.DATA.Velocity);
+    peak_acc = find_Vpp_window(OUTPUT.Data{idx}.DATA.Acceleration);
+    peak_dsp = find_Vpp_window(OUTPUT.Data{idx}.DATA.Displacement);
+    maxVpp = zeros(3, OUTPUT.Data{idx}.Nsensors);
+    maxApp = zeros(3, OUTPUT.Data{idx}.Nsensors);
+    maxDpp = zeros(3, OUTPUT.Data{idx}.Nsensors);
+    for sid = 1:1:OUTPUT.Data{idx}.Nsensors
+        for comp_id = 1:1:3
+            idc = (sid - 1)*3+comp_id;
+            mVpp_idx = peak_vel(idc,:);
+            mApp_idx = peak_acc(idc,:);
+            mDpp_idx = peak_dsp(idc,:);
+            maxVpp(comp_id, sid) = sum(abs(data(mVpp_idx,idc)));
+            maxApp(comp_id, sid) = sum(abs(data(mApp_idx,idc)));
+            maxDpp(comp_id, sid) = sum(abs(data(mDpp_idx,idc)));
+        end
+    end
+    maxVpp = array2table(maxVpp);
+    maxVpp.Properties.VariableNames = OUTPUT.Sensor_configuration.SensorNames;
+    maxVpp.Properties.RowNames = {'VppX','VppY','VppZ'};
+    maxApp = array2table(maxApp);
+    maxApp.Properties.VariableNames = OUTPUT.Sensor_configuration.SensorNames;
+    maxApp.Properties.RowNames = {'AppX','AppY','AppZ'};
+    maxDpp = array2table(maxDpp);
+    maxDpp.Properties.VariableNames = OUTPUT.Sensor_configuration.SensorNames;
+    maxDpp.Properties.RowNames = {'DppX','DppY','DppZ'};
+    OUTPUT.Data{idx}.DATA.App = maxApp;
+    OUTPUT.Data{idx}.DATA.Vpp = maxVpp;
+    OUTPUT.Data{idx}.DATA.Dpp = maxDpp;
 end
 
 function fftdata = getFFT(data, tab)
     N = tab.UserData.window_size;
     applyHamming = tab.UserData.applyHamming;
     specSmoothN = tab.UserData.smoothN;
+    
     if(applyHamming)
-        window_function = repmat(hamming(N), ...
-            1, size(data,2));
+        window_function = hamming(N);
     else
-        window_function = ones(N,size(data,2));
+        window_function = ones(N,1);
     end
-    fftdata = abs(fft(data.*window_function, N, 1));
+    window_function = repmat(window_function/max(window_function), ...
+            1, size(data,2));
+    fftdata = abs(fft(data.*window_function, N, 1)./N);
     fftdata = abs(fftdata(ceil(1:N/2),:));
     fftdata(2:end-1,:) = 2*fftdata(2:end-1,:);
     if(specSmoothN ~= 1)
@@ -386,8 +422,10 @@ global OUTPUT
     end
     
     %Signal Plot
-    colors = [217 83 25; 0 114 189; 237 177 32]./255;
+    colors = [0 114 189; 217 83 25; 237 177 32]./255;
     components = 'XYZ';
+    OutputType = 'AVD';
+    OutputType = OutputType(tab.UserData.AccVelDisp);
     num_sensors = OUTPUT.Data{idx}.Nsensors;
     data_range = max(max(abs(data)));
     for idx = 0:1:num_sensors - 1
@@ -419,15 +457,15 @@ global OUTPUT
             plot(t(mVpp_idx), data(mVpp_idx, idc), 'LineStyle', 'none', ...
                 'Marker','d','MarkerFaceColor', colors(comp_id,:), ...
                 'Parent', ax)
-            Vpp_string = sprintf('%sV_p_p%c=%5.3f \n', ...
-                Vpp_string, components(comp_id), maxVpp);
+            Vpp_string = sprintf('%s%c_p_p%c=%5.3f \n', ...
+                Vpp_string, OutputType, components(comp_id), maxVpp);
         end 
         text(t(end-2), min(ax.YLim), Vpp_string(1:end-1), 'Color', 'k', ...
             'BackgroundColor', 'none', 'Parent', ax, ...
             'VerticalAlignment', 'bottom', 'Margin', 0.0001, ...
             'HorizontalAlignment', 'right', 'FontWeight', 'bold');
         text(t(2), max(ax.YLim), sprintf(' %s %s', tab.UserData.Units, ...
-            OUTPUT.Sensor_configuration.SensorNames{idx+1}), ...
+            OUTPUT.Sensor_configuration.SensorNames{num_sensors - idx}), ...
             'Color', 'k', 'BackgroundColor', 'none', 'Parent', ax, ...
             'VerticalAlignment', 'top', 'Margin', 0.0001, ...
             'FontSize', 18, 'FontWeight', 'bold');
@@ -451,7 +489,8 @@ global OUTPUT
             'XAxisLocation', 'bottom', 'NextPlot', 'add', ...
             'XGrid', 'on', 'YGrid', 'on', 'GridLineStyle', '-', ...
             'GridColor', 'k', 'YLim', fft_range, 'YTick', 10.^(-4:1:4), ...
-            'XLim', [f(1), f(end)], 'XTick', [0.1 1 10 100]);
+            'XLim', [max(0.1, f(1)), f(end)], 'XTick', [0.01 0.1 1 10 100], ...
+            'XScale', 'log', 'YScale', 'log');
 
         if(idx==0)
             ax.XAxis.Visible = 'on';
@@ -581,7 +620,6 @@ global OUTPUT
 end
 
 function savebutton_callback(~, ~)
-    throw(MException('Incomplete','Incomplete'))
     fig = hObject.Parent;
     time_tb = hObject.UserData;
     default_name = fig.Name;

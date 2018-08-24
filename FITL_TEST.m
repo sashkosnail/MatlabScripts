@@ -18,9 +18,9 @@
 % step(aa)
 % grid major; grid minor
 %% High-pass sections
-% ttt = tf([1 0], [1 (1e6*7e-6)^-1]);
-% fff = tf([1 0], [1 (1000e3*10e-6)^-1]);
-% qqq = tf([1 0], [1 (1000e3*10e-6)^-1]);
+ttt = tf([1 0], [1 (1e6*7e-6)^-1]);
+fff = tf([1 0], [1 (1000e3*10e-6)^-1]);
+qqq = tf([1 0], [1 (1000e3*10e-6)^-1]);
 aa=ttt*fff*qqq;
 a=fff*qqq;
 f= figure(999); clf; hold on
