@@ -375,7 +375,7 @@ function fftdata = getFFT(data, tab)
     fftdata = abs(fftdata(ceil(1:N/2),:));
     fftdata(2:end-1,:) = 2*fftdata(2:end-1,:);
     if(specSmoothN ~= 1)
-        fftdata = filtfilt(ones(1,specSmoothN),1,fftdata);
+        fftdata = filtfilt(ones(1,specSmoothN)./specSmoothN,1,fftdata);
     end
 end
 
@@ -484,7 +484,7 @@ global OUTPUT
         data_id = ((num_sensors -1 - idx)*3 + 1):((num_sensors - idx)*3);
         ax = tab.UserData.ChannelAxis{idx+1}.SpectrumAxis;
         cla(ax);
-        loglog(f,abs(fftdata(:,data_id)), 'LineWidth', 1, 'Parent', ax);
+        loglog(f,fftdata(:,data_id), 'LineWidth', 1, 'Parent', ax);
         set(ax, 'Color', 'w', 'GridColor', 'k', ...
             'XAxisLocation', 'bottom', 'NextPlot', 'add', ...
             'XGrid', 'on', 'YGrid', 'on', 'GridLineStyle', '-', ...
