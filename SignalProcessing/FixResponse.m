@@ -5,6 +5,7 @@ function corrected = FixResponse(data, sensorNum, targetF, Fs)
     %%%
     N = size(data,1);
     sensor_freqs = GetCornerFreqs(sensorNum);
+    %switch this to calc only one column of F1 and then replicate
     f = repmat((1:N)'*Fs/N, 1, num_chans);
     fs = repmat(sensor_freqs(1:1:num_chans), N, 1);
     ft = repmat(targetF, N, num_chans);
@@ -16,16 +17,12 @@ function corrected = FixResponse(data, sensorNum, targetF, Fs)
     correction = correction + correction(end:-1:1,:) - ...
         repmat(correction(end,:),length(correction),1);
 %     semilogy(f(:,1), [tmp1(:,1) tmp2(:,1) correction(:,1)]);
-%     legend('tmp1','tmp2','Combo');
+%     legend('tmp1','tmp2','Combo');t
 %     xlim([0.01 50]);
 %     ylim([0.001 1000]);
 %     grid on
     fftdata = fft(data);
-    fftdata_real = real(fftdata);
-    fftdata_imag = imag(fftdata);
-    
-    fftcorrected = (fftdata_real + 1i*fftdata_imag).*correction;
-    corrected = ifft(fftcorrected, 'symmetric');
+    corrected = ifft(fftdata.*correction, 'symmetric');
 end
 
 function freqs = GetCornerFreqs(sensorNum)

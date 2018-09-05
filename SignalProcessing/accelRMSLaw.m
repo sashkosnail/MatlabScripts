@@ -1,5 +1,6 @@
 global OUTPUT
-figure(2222);clf
+fig = figure(2222);clf
+fig.Color = 'w';
 N = length(OUTPUT.Data);
 M = OUTPUT.Data{1}.Nsensors;
 rmsTotal = zeros(N,M);
@@ -19,10 +20,14 @@ for n = 1:1:N
         plot(t, ampTotal, 'k'); hold on
         plot([t(1) t(end)], rmsTotal(n, m)*[1 1], 'r');
         axis tight
-        title([OUTPUT.Sensor_configuration.SensorNames{m} ' RMS:' num2str(rmsTotal(n,m)) 'mm/s^2']);
+        title(sprintf('%s RMS:%3.3gm/s^2 L_a_w:%3.3gdB', ...
+            OUTPUT.Sensor_configuration.SensorNames{m}, ...
+            rmsTotal(n,m), 20*log10(rmsTotal(n,m)/10^-6)), 'FontSize', 8);
         if(n==1&&m==M)
-            ylabel('Total Vector Amplitude[mm/s^2]');
-            xlabel('Time[s]');
+            ylabel('Total Vector Amplitude[m/s^2]', ...
+                'FontWeight', 'bold', 'FontSize', 12);
+            xlabel('Time[s]', ...
+                'FontWeight', 'bold', 'FontSize', 12);
         end
     end    
 end
@@ -31,9 +36,11 @@ for n = 1:1:N
         ax{m,n}.YLim = [0 max_data];
     end
 end
-rmsMean = geomean(rmsTotal);
+rmsMean = mean(rmsTotal);
 table_data = [rmsMean; 20*log10(rmsMean/10^-6)];
 rmsTable = array2table(table_data);
 rmsTable.Properties.RowNames = {'RMS[m/s^2]', 'L_a_w[dB]'};
 rmsTable.Properties.VariableNames = OUTPUT.Sensor_configuration.SensorNames;
 disp(rmsTable)
+file = 'D:\Documents\PhD\FieldStudies\Holocim_Latacunga\2018\new_measurement\Result\RMS_Test11MillOn.xlsx';
+writetable(rmsTable, file,'WriteRowNames',true)

@@ -1,14 +1,19 @@
 %UI setup
 function DYNAMate_Process_Data_GUI(varargin)
-global OUTPUT PathName tab_group wait_window 
-    if(~exist('PathName', 'file'))
+clearvars -global OUTPUT
+global OUTPUT PathName tab_group wait_window
+    version = 'v1.5.0';
+    if(isempty(PathName) || ~exist(PathName, 'dir'))
         PathName = [pwd '\']; 
     end
     wait_window = waitbar(0,'Please wait...');
     wait_window.Children.Title.Interpreter = 'none';
-    fig = figure('DeleteFcn', @figure_close_cb); clf
+    fig = figure(9999);
+    set(fig, 'DeleteFcn', @figure_close_cb, 'NumberTitle', 'off', ...
+        'Name', ['DYNAMate Process ' version], 'MenuBar', 'none'); 
+    clf
     pause(0.00001);
-    set(fig, 'ToolBar', 'none', 'Units', 'Normalized', ...
+    set(fig, 'ToolBar', 'figure', 'Units', 'Normalized', ...
         'OuterPosition', [0 0 1 1]);
     
     tab_group = uitabgroup('Parent', fig, 'Units', 'normalized', ...
@@ -37,7 +42,8 @@ global OUTPUT tab_group wait_window file_progress total_progress
     signal_length = OUTPUT.Data{idx}.SignalNSamples;
     num_sensors = OUTPUT.Data{idx}.Nsensors;
     %create parameters
-    window_size = min(4096, signal_length);
+    window_size = signal_length-Fs*2;%min(4096, signal_length);
+    window_center = signal_length/(2*Fs);
     smoothN = 5;
     
     %create UI controls
@@ -67,7 +73,7 @@ global OUTPUT tab_group wait_window file_progress total_progress
         'String', 'Window Center Time:', 'HorizontalAlignment', 'right'); %#ok<NASGU>
     time_tb = uicontrol('Parent', tab, 'Style', 'edit', ...
         'Units', 'normalized', 'Position', [0.225 0.98 0.05 0.02], ...
-        'KeyReleaseFcn', @time_tb_callback, 'String', num2str(window_size/(2*Fs)), ...
+        'KeyReleaseFcn', @time_tb_callback, 'String', num2str(window_center), ...
         'ToolTipString', 'Window Center Time');
     
     window_size_text = uicontrol('Parent', tab, 'Style', 'text', ...
@@ -110,16 +116,17 @@ global OUTPUT tab_group wait_window file_progress total_progress
     
     %set user data object
     tab.UserData = struct('window_size', window_size, 'Units', '[mm/s]', ...
-        'smoothN', smoothN, 'CurrentWindow', [1 window_size], ...
+        'smoothN', smoothN, 'TimeTB', time_tb, ...
+        'CurrentWindow', floor(window_center*Fs) + [-window_size/2+1 window_size/2], ...
         'applyHamming', 0, 'DataIDX', idx, 'AccVelDisp', 2, ...
         'FullPlot', full_plot_axis, 'ChannelAxis', {ch_axis}, ...
-        'VertBars', [], 'VertBarsH', [], 'TimeTB', time_tb);
+        'VertBars', [], 'VertBarsH', []);
     if(isvalid(wait_window))
         waitbar(total_progress + file_progress*0.8, wait_window, ...
             [wait_window.UserData 'Plotting Data']);
     end
     %plot data
-    plot_tab_data(tab);
+    plot_tab_data(tab);    
 end
 
 %Read Data
@@ -139,22 +146,22 @@ global PathName OUTPUT wait_window file_progress total_progress
         TDMSStruct = TDMS_getStruct([PathName datfile],6);
         
         if(~isTableCol(TDMSStruct.Properties, 'DAQVersion'))
-            answer = questdlg('Is data from DYNAMate V1.0?', ...
-                'Cannot Determine HW version', 'Yes', 'No', 'No');
+%             answer = questdlg('Is data from DYNAMate V1.0?', ...
+%                 'Cannot Determine HW version', 'Yes', 'No', 'No');
+            answer = 'No';
             if(strcmpi('Yes', answer))
-                DAQVersion = '1.0';
+                TDMSStruct.Properties.DAQVersion = '1.0';
             else
-                DAQVersion = 'N/A';
+                TDMSStruct.Properties.DAQVersion = 'N/A';
             end
-        else
-            DAQVersion = TDMSStruct.Properties.DAQVersion;
         end
+        DAQVersion = TDMSStruct.Properties.DAQVersion;
         if(~isTableCol(TDMSStruct.Properties, 'SoftwareVersion'))
             SWVersion = 'N/A';
         else
             SWVersion = TDMSStruct.Properties.SoftwareVersion;
         end
-        oldDAQ = strcmp(TDMSStruct.Properties.DAQVersion, '1.0');
+        oldDAQ = strcmp(DAQVersion, '1.0');
         
         %Redundant read, future proof for config in TDMS
         read_sensor_config();
@@ -271,11 +278,12 @@ end
 
 function processData(idx)
 global OUTPUT wait_window total_progress file_progress
+persistent fix_response
     Fs = OUTPUT.Data{idx}.Fs;
     Ts = 1/Fs;
     
-    Nw = 0.015;
-    Nf = 3*Fs;
+    Nw = 0.05;
+    Nf = 5*Fs;
     taper_tau = 1.0;
     
     data = OUTPUT.Data{idx}.DATA.Velocity;
@@ -291,23 +299,23 @@ global OUTPUT wait_window total_progress file_progress
 %     offset = movmean(mvmean,ones(Nf,1)/Nf); 
     offset = repmat(mean(data),length(data),1);
     data = data - offset;
-    %Apply taper
-    taper = build_taper(t, taper_tau);
-    taper = repmat(taper, 1, size(data,2));
-    data = (data - repmat(mean(data),length(data),1)).*taper;
-    data = (data - repmat(mean(data),length(data),1)).*taper;
     
-    if(strcmp('Yes', questdlg(...
-            'Do you want to correct sensor reponse to 0.5Hz', ...
-            'Sensor Correction', 'Yes', 'No', 'No')))
+%     if(strcmp('Yes', questdlg(...
+%             'Do you want to correct sensor reponse to 0.5Hz', ...
+%             'Sensor Correction', 'Yes', 'No', 'No')))
         if(isvalid(wait_window))
             waitbar(total_progress + file_progress*0.5, wait_window, ...
             [wait_window.UserData 'Correcting Sensor Response']);
         end
-        targetFc = 0.5;
+        targetFc = 0.2;
+        %Apply taper
+        taper = build_taper(t, taper_tau);
+        taper = repmat(taper, 1, size(data,2));
+        data = (data - repmat(mean(data),length(data),1)).*taper;
+        data = (data - repmat(mean(data),length(data),1)).*taper;
         data = FixResponse(data, -1, targetFc, Fs);
         OUTPUT.Data{idx}.ConfigTable.SensorFc = targetFc;
-    end
+%     end
     
     if(isvalid(wait_window))
         waitbar(total_progress + file_progress*0.55, wait_window, ...
@@ -315,48 +323,51 @@ global OUTPUT wait_window total_progress file_progress
     end
     %Calculate Acceleration and Displacement
     dsp = cumtrapz(t, data); 
-    dfm = cumtrapz(t, dsp)*0.5./repmat((t+Ts),1 ,size(data,2));    
-    
+    dfm = 0;%cumtrapz(t, dsp)*0.5./repmat((t+Ts),1 ,size(data,2));    
     %set data to output
     OUTPUT.Data{idx}.DATA.Velocity = data; %[mm/s]
     OUTPUT.Data{idx}.DATA.Acceleration = [zeros(1, size(data,2)); ...
         diff(data/1000)/Ts]; %[m/s^2]
     OUTPUT.Data{idx}.DATA.Displacement = dsp-dfm; %[mm]
     
-    %peak to peak data
-    if(isvalid(wait_window))
-        waitbar(total_progress + file_progress*0.6, wait_window, ...
-            [wait_window.UserData 'Finding Peak to Peak Values']);
-    end
-    peak_vel = find_Vpp_window(OUTPUT.Data{idx}.DATA.Velocity);
-    peak_acc = find_Vpp_window(OUTPUT.Data{idx}.DATA.Acceleration);
-    peak_dsp = find_Vpp_window(OUTPUT.Data{idx}.DATA.Displacement);
-    maxVpp = zeros(3, OUTPUT.Data{idx}.Nsensors);
-    maxApp = zeros(3, OUTPUT.Data{idx}.Nsensors);
-    maxDpp = zeros(3, OUTPUT.Data{idx}.Nsensors);
-    for sid = 1:1:OUTPUT.Data{idx}.Nsensors
-        for comp_id = 1:1:3
-            idc = (sid - 1)*3+comp_id;
-            mVpp_idx = peak_vel(idc,:);
-            mApp_idx = peak_acc(idc,:);
-            mDpp_idx = peak_dsp(idc,:);
-            maxVpp(comp_id, sid) = sum(abs(data(mVpp_idx,idc)));
-            maxApp(comp_id, sid) = sum(abs(data(mApp_idx,idc)));
-            maxDpp(comp_id, sid) = sum(abs(data(mDpp_idx,idc)));
-        end
-    end
-    maxVpp = array2table(maxVpp);
-    maxVpp.Properties.VariableNames = OUTPUT.Sensor_configuration.SensorNames;
-    maxVpp.Properties.RowNames = {'VppX','VppY','VppZ'};
-    maxApp = array2table(maxApp);
-    maxApp.Properties.VariableNames = OUTPUT.Sensor_configuration.SensorNames;
-    maxApp.Properties.RowNames = {'AppX','AppY','AppZ'};
-    maxDpp = array2table(maxDpp);
-    maxDpp.Properties.VariableNames = OUTPUT.Sensor_configuration.SensorNames;
-    maxDpp.Properties.RowNames = {'DppX','DppY','DppZ'};
-    OUTPUT.Data{idx}.DATA.App = maxApp;
-    OUTPUT.Data{idx}.DATA.Vpp = maxVpp;
-    OUTPUT.Data{idx}.DATA.Dpp = maxDpp;
+%     %peak to peak data
+%     if(isvalid(wait_window))
+%         waitbar(total_progress + file_progress*0.6, wait_window, ...
+%             [wait_window.UserData 'Finding Peak to Peak Values']);
+%     end
+%     peak_vel = find_Vpp_window(OUTPUT.Data{idx}.DATA.Velocity);
+%     peak_acc = find_Vpp_window(OUTPUT.Data{idx}.DATA.Acceleration);
+%     peak_dsp = find_Vpp_window(OUTPUT.Data{idx}.DATA.Displacement);
+%     maxVpp = zeros(3, OUTPUT.Data{idx}.Nsensors);
+%     maxApp = zeros(3, OUTPUT.Data{idx}.Nsensors);
+%     maxDpp = zeros(3, OUTPUT.Data{idx}.Nsensors);
+%     for sid = 1:1:OUTPUT.Data{idx}.Nsensors
+%         for comp_id = 1:1:3
+%             idc = (sid - 1)*3+comp_id;
+%             mVpp_idx = peak_vel(idc,:);
+%             mApp_idx = peak_acc(idc,:);
+%             mDpp_idx = peak_dsp(idc,:);
+%             maxVpp(comp_id, sid) = sum(abs(...
+%                 OUTPUT.Data{idx}.DATA.Velocity(mVpp_idx,idc)));
+%             maxApp(comp_id, sid) = sum(abs(...
+%                 OUTPUT.Data{idx}.DATA.Acceleration(mApp_idx,idc)));
+%             maxDpp(comp_id, sid) = sum(abs(...
+%                 OUTPUT.Data{idx}.DATA.Displacement(mDpp_idx,idc)));
+%         end
+%     end
+%     maxVpp = array2table(maxVpp);
+%     maxVpp.Properties.VariableNames = OUTPUT.Sensor_configuration.SensorNames;
+%     maxVpp.Properties.RowNames = {'VppX','VppY','VppZ'};
+%     maxApp = array2table(maxApp);
+%     maxApp.Properties.VariableNames = OUTPUT.Sensor_configuration.SensorNames;
+%     maxApp.Properties.RowNames = {'AppX','AppY','AppZ'};
+%     maxDpp = array2table(maxDpp);
+%     maxDpp.Properties.VariableNames = OUTPUT.Sensor_configuration.SensorNames;
+%     maxDpp.Properties.RowNames = {'DppX','DppY','DppZ'};
+%     
+%     OUTPUT.Data{idx}.DATA.App = maxApp;
+%     OUTPUT.Data{idx}.DATA.Vpp = maxVpp;
+%     OUTPUT.Data{idx}.DATA.Dpp = maxDpp;
 end
 
 function fftdata = getFFT(data, tab)
@@ -400,7 +411,7 @@ global OUTPUT
     set(ax, 'Color', 'w', 'XAxisLocation', 'top', 'NextPlot', 'add', ...
         'XGrid', 'on', 'YGrid', 'on', 'GridColor', 'k', 'TickDir', 'in', ...
         'GridLineStyle', ':', 'XLim', [t(1) t(end)], 'Ylim', y_limits); 
-    ax.YTickLabel = cellstr(num2str(ax.YTick', '%5.3f'));
+    ax.YTickLabel = cellstr(num2str(ax.YTick', '%.3g'));
     
     plot_vert_bars(tab);
     plot_channel_data(tab)
@@ -427,17 +438,21 @@ global OUTPUT
     OutputType = 'AVD';
     OutputType = OutputType(tab.UserData.AccVelDisp);
     num_sensors = OUTPUT.Data{idx}.Nsensors;
-    data_range = max(max(abs(data)));
+%     data_range = max(max(abs(data)));
     for idx = 0:1:num_sensors - 1
         data_id = ((num_sensors -1 - idx)*3 + 1):((num_sensors - idx)*3);
         ax = tab.UserData.ChannelAxis{idx+1}.SignalAxis;
         cla(ax);
         plot(t,data(:,data_id), 'LineWidth', 1, 'Parent', ax);
+        data_range = max(max(abs(data(:,data_id))));
         set(ax, 'Color', 'w', 'GridColor', 'k', 'XLim', [t(1) t(end)], ...
             'XAxisLocation', 'bottom', 'NextPlot', 'add', ...
         'XGrid', 'on', 'YGrid', 'on', 'GridColor', 'k', ...
         'GridLineStyle', '-', 'YLim', [-1 1].*data_range);
-        ax.YTickLabel = cellstr(num2str(ax.YTick', '%5.3f'));
+%         tmp = linspace(0, ax.YTick(end), 3);
+%         ax.YTick = [-tmp(end:-1:2) tmp];
+        ax.YTickLabel= cellstr(num2str(ax.YTick', '%.3g'));
+%         axis(ax, 'equal');
         if(idx==0)
             ax.XAxis.Visible = 'on';
             ax.XLabel = text('Units', 'normalized', 'Parent', ax, ...
@@ -446,24 +461,25 @@ global OUTPUT
             ax.XAxis.TickLabels = [];
         end
         %Peaks      
-        peak_data = find_Vpp_window(data);
-        VppTable = zeros(1, 24);
-        Vpp_string = '';
-        for comp_id = 1:1:3
-            idc = (num_sensors - 1 - idx)*3+comp_id;
-            mVpp_idx = peak_data(idc,:);
-            maxVpp = sum(abs(data(mVpp_idx,idc)));
-            VppTable(idc) = maxVpp;
-            plot(t(mVpp_idx), data(mVpp_idx, idc), 'LineStyle', 'none', ...
-                'Marker','d','MarkerFaceColor', colors(comp_id,:), ...
-                'Parent', ax)
-            Vpp_string = sprintf('%s%c_p_p%c=%5.3f \n', ...
-                Vpp_string, OutputType, components(comp_id), maxVpp);
-        end 
-        text(t(end-2), min(ax.YLim), Vpp_string(1:end-1), 'Color', 'k', ...
-            'BackgroundColor', 'none', 'Parent', ax, ...
-            'VerticalAlignment', 'bottom', 'Margin', 0.0001, ...
-            'HorizontalAlignment', 'right', 'FontWeight', 'bold');
+%         peak_data = find_Vpp_window(data);
+%         VppTable = zeros(1, 24);
+%         Vpp_string = '';
+%         for comp_id = 1:1:3
+%             idc = (num_sensors - 1 - idx)*3+comp_id;
+%             mVpp_idx = peak_data(idc,:);
+%             maxVpp = sum(abs(data(mVpp_idx,idc)));
+%             VppTable(idc) = maxVpp;
+%             plot(t(mVpp_idx), data(mVpp_idx, idc), 'LineStyle', 'none', ...
+%                 'Marker','d','MarkerFaceColor', colors(comp_id,:), ...
+%                 'MarkerEdgeColor', 'k', 'LineWidth', 2, ...
+%                 'MarkerSize', 10, 'Parent', ax);
+%             Vpp_string = sprintf('%s%c_p_p%c=%5.3f \n', ...
+%                 Vpp_string, OutputType, components(comp_id), maxVpp);
+%         end 
+%         text(t(end-2), min(ax.YLim), Vpp_string(1:end-1), 'Color', 'k', ...
+%             'BackgroundColor', 'none', 'Parent', ax, ...
+%             'VerticalAlignment', 'bottom', 'Margin', 0.0001, ...
+%             'HorizontalAlignment', 'right', 'FontWeight', 'bold');
         text(t(2), max(ax.YLim), sprintf(' %s %s', tab.UserData.Units, ...
             OUTPUT.Sensor_configuration.SensorNames{num_sensors - idx}), ...
             'Color', 'k', 'BackgroundColor', 'none', 'Parent', ax, ...
@@ -535,7 +551,7 @@ global OUTPUT
     elseif(CurrentWindow(2) > L)
         CurrentWindow = CurrentWindow - CurrentWindow(2)+L;
     end
-    tab.UserData.CurrentWindow = CurrentWindow;
+    tab.UserData.CurrentWindow = floor(CurrentWindow);
     tab.UserData.TimeTB.String = num2str(floor(mean(CurrentWindow))/Fs);
     plot_vert_bars(tab)
     plot_channel_data(tab);
@@ -619,28 +635,67 @@ global OUTPUT
     adjust_window(tab, -1);
 end
 
-function savebutton_callback(~, ~)
-    fig = hObject.Parent;
-    time_tb = hObject.UserData;
-    default_name = fig.Name;
-    default_name(isspace(default_name))=[];
-    dash_idx = find(default_name=='-') - 1;
-    default_name = [default_name(1:dash_idx), '_', time_tb.String, ...
-        '_', default_name(dash_idx+2:end)];
-    
-    [FileName,PathName_save] = uiputfile('*.png', 'Save Results', ...
-        [PathName, default_name]);
-    if(FileName == 0) ;return; end
-    
-    export_fig(strcat(PathName_save, FileName(1:end-4)), ...
-        '-c[20 0 0 0]', fig);
-    writetable(STATS, [PathName_save, FileName(1:end-4),'.xlsx'], ...
-        'WriteRowNames', 1);
-    
-    savefig(fig,strcat(PathName_save, fig.Name),'compact');
-    csvwrite([PathName_save, fig.Name,'.csv'], ...
-        [(0:1:length(data)-1)'/Fs data]);
+function savebutton_callback(hObject, ~)
+%     fig = hObject.Parent;
+%     time_tb = hObject.UserData;
+%     default_name = fig.Name;
+%     default_name(isspace(default_name))=[];
+%     dash_idx = find(default_name=='-') - 1;
+%     default_name = [default_name(1:dash_idx), '_', time_tb.String, ...
+%         '_', default_name(dash_idx+2:end)];
+%     
+%     [FileName,PathName_save] = uiputfile('*.png', 'Save Results', ...
+%         [PathName, default_name]);
+%     if(FileName == 0) ;return; end
+%     
+%     export_fig(strcat(PathName_save, FileName(1:end-4)), ...
+%         '-c[20 0 0 0]', fig);
+%     writetable(STATS, [PathName_save, FileName(1:end-4),'.xlsx'], ...
+%         'WriteRowNames', 1);
+%     
+%     savefig(fig,strcat(PathName_save, fig.Name),'compact');
+%     csvwrite([PathName_save, fig.Name,'.csv'], ...
+%         [(0:1:length(data)-1)'/Fs data]);
+global OUTPUT PathName
+    idx = hObject.Parent.UserData.DataIDX;
+    wait_window = waitbar(0,'Saving, please wait...');
+    base_file = 'D:\Documents\PhD\FieldStudies\SaudiData\OUT\0.2Hz\EG2\';
+    test_name = 'Test6';
+    source_file = OUTPUT.Data{idx}.FileName(1:end-5);
+    file = [base_file test_name '_' source_file];
+%     writetable(OUTPUT.Data{idx}.DATA.App, [file '_App.xlsx'], ...
+%         'WriteRowNames', true)
+%     writetable(OUTPUT.Data{idx}.DATA.Vpp, [file '_Vpp.xlsx'], ...
+%         'WriteRowNames', true)
+%     writetable(OUTPUT.Data{idx}.DATA.Dpp, [file '_Dpp.xlsx'], ...
+%     'WriteRowNames', true)
+    waitbar(0.1, wait_window, 'Saving, please wait...');
+    tbl = [OUTPUT.Data{idx}.DATA.Time OUTPUT.Data{idx}.DATA.Acceleration];
+    tbl = array2table(tbl);
+    writetable(tbl, [file '.xlsx'], 'Sheet', 'Acceleration');
+    xlswrite([file '.xlsx'], ['Time[s]', ...
+        cellfun(@(c) strcat(c, '[m/s^2]'), ...
+        OUTPUT.Sensor_configuration.ChannelNames, 'uni', 0)], ...
+        'Acceleration', 'A1');
+    waitbar(0.4, wait_window, 'Saving, please wait...');
+    tbl = [OUTPUT.Data{idx}.DATA.Time OUTPUT.Data{idx}.DATA.Velocity];
+    tbl = array2table(tbl);
+    writetable(tbl, [file '.xlsx'], 'Sheet', 'Velocity');
+    xlswrite([file '.xlsx'], ['Time[s]', ...
+        cellfun(@(c) strcat(c, '[mm/s]'), ...
+        OUTPUT.Sensor_configuration.ChannelNames, 'uni', 0)], ...
+        'Velocity', 'A1');
+    waitbar(0.7, wait_window, 'Saving, please wait...');
+    tbl = [OUTPUT.Data{idx}.DATA.Time OUTPUT.Data{idx}.DATA.Displacement];
+    tbl = array2table(tbl);
+    writetable(tbl, [file '.xlsx'], 'Sheet', 'Displacement');
+    xlswrite([file '.xlsx'], ['Time[s]', ...
+        cellfun(@(c) strcat(c, '[mm]'), ...
+        OUTPUT.Sensor_configuration.ChannelNames, 'uni', 0)], ...
+        'Displacement', 'A1');
+    waitbar(1, wait_window, 'Saving, please wait...');
     disp('Save Complete')
+    delete(wait_window);
 end
 
 function data_type_pd_callback(hObject, ~)

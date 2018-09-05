@@ -105,11 +105,11 @@ for idx = 1:1:length(FileName)
     
     %plot signals
     fig_name = datfile;
-    fig = plot_sensor_data(D, fig_name, names);
+    fig = plot_sensor_data(D, fig_name, names, idx);
     
     %build result table and display/save results
 	Dtable = array2table(D, 'VariableNames', [{'Time'}, names]);
-    save_data = 'Y'; %#ok<NASGU>
+    save_data = 'N'; %#ok<NASGU>
 %     save_data = upper(input('Save Data Y/N [Y]:','s'));
     if isempty(save_data)
         save_data = 'Y'  %#ok<NOPTS>

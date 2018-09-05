@@ -1,4 +1,4 @@
-function fig = plot_sensor_data(D, fig_name, names)
+function fig = plot_sensor_data(D, fig_name, names, fig_id)
     Nsensors = (size(D,2)-1)/3;    
     t=D(:,1);Fs = 1/(t(2)-t(1));
     data = D(:,2:end);
@@ -13,7 +13,7 @@ function fig = plot_sensor_data(D, fig_name, names)
     
     f = Fs*(1:N/2)'/N;
     
-    fig = figure();
+    fig = figure(fig_id);
     set(fig, 'Name', fig_name); clf
     set(fig, 'Units', 'Normalized', 'OuterPosition', [0 0 1 1]);
 
