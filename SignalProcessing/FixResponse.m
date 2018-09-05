@@ -6,7 +6,7 @@ function corrected = FixResponse(data, sensorNum, targetF, Fs)
     N = size(data,1);
     sensor_freqs = GetCornerFreqs(sensorNum);
     %switch this to calc only one column of F1 and then replicate
-    f = repmat((1:N)'*Fs/N, 1, num_chans);
+    f = repmat((0:N-1)'*Fs/N, 1, num_chans);
     fs = repmat(sensor_freqs(1:1:num_chans), N, 1);
     ft = repmat(targetF, N, num_chans);
     F1 = (f./ft).^2;
