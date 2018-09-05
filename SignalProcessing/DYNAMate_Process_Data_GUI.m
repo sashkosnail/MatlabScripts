@@ -307,7 +307,7 @@ persistent fix_response
             waitbar(total_progress + file_progress*0.5, wait_window, ...
             [wait_window.UserData 'Correcting Sensor Response']);
         end
-        targetFc = 0.2;
+        targetFc = 0.1;
         %Apply taper
         taper = build_taper(t, taper_tau);
         taper = repmat(taper, 1, size(data,2));
