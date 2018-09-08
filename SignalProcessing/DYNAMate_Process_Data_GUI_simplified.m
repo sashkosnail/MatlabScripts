@@ -2,12 +2,16 @@
 function DYNAMate_Process_Data_GUI_simplified(varargin)
 clearvars -global OUTPUT
 global OUTPUT PathName tab_group wait_window fig
+    wait_window = waitbar(0,'Please wait...');
+    wait_window.Children.Title.Interpreter = 'none';
+    WindowAPI(wait_window, 'TopMost');
+    WindowAPI(wait_window, 'clip', [1 1 360 78]);
+    
     version = 'v1.6.0';
     if(isempty(PathName) || sum(PathName == 0) || ~exist(PathName, 'dir'))
         PathName = [pwd '\']; 
     end
-    wait_window = waitbar(0,'Please wait...');
-    wait_window.Children.Title.Interpreter = 'none';
+
     fig = figure(9999);
     figszfun = @(h,~) set(h, 'position', max([0 0 1280 768], h.Position));
     set(fig, 'DeleteFcn', @figure_close_cb, 'NumberTitle', 'off', ...
@@ -16,8 +20,6 @@ global OUTPUT PathName tab_group wait_window fig
     pause(0.00001);
 %     set(fig, 'Units', 'Normalized', 'OuterPosition', [0 0 1 1]);
     WindowAPI(fig, 'Maximize');
-    WindowAPI(wait_window, 'TopMost');
-    WindowAPI(wait_window, 'clip', [1 1 360 70]);
     
     tab_group = uitabgroup('Parent', fig, 'Units', 'normalized', ...
         'Position', [0 0, 1, 1]);
@@ -42,10 +44,10 @@ end
 
 function createNewTab(idx)
 global OUTPUT tab_group wait_window file_progress total_progress
-    tab = uitab('Parent', tab_group, 'Title', OUTPUT.Data{1}.FileName, ...
+    tab = uitab('Parent', tab_group, 'Title', OUTPUT.Data{idx}.FileName, ...
         'Units', 'pixels');
 
-    num_sensors = OUTPUT.Data{1}.Nsensors;
+    num_sensors = OUTPUT.Data{idx}.Nsensors;
     %create parameters
 
     %create UI controls
@@ -101,10 +103,10 @@ global OUTPUT tab_group wait_window file_progress total_progress
     datatip_button.UserData = [pan_button zoom_button];
 
     overview_text = uitable('Parent', tab);
-    overview_text.Data = table2cell(OUTPUT.Data{1}.ConfigTable(:,2:end));
+    overview_text.Data = table2cell(OUTPUT.Data{idx}.ConfigTable(:,2:end));
     overview_text.ColumnName = ...
-        OUTPUT.Data{1}.ConfigTable.Properties.VariableNames(2:end);
-    overview_text.ColumnWidth = {70, 60, 30, 60, 50, 50, 40, 50, 60, 100, 100, 100};
+        OUTPUT.Data{idx}.ConfigTable.Properties.VariableNames(2:end);
+    overview_text.ColumnWidth = {70, 60, 30, 60, 50, 50, 40, 50, 60, 60, 60, 60, 60};
     next_size = [sum(cell2mat(overview_text.ColumnWidth))+2 40];
     overview_text.Units = 'pixels';
     overview_text.Position = [start_position next_size];
@@ -213,9 +215,15 @@ global PathName OUTPUT wait_window file_progress total_progress
             SCALE_str = SCALES_str2{scale_selected};
             SCALE = SCALES_2(scale_selected);
         end
-          
-        PossibleSaturationCH = find(sum(abs(DATA(:,2:end)) > 0.99*SCALE));
         
+        %load config file
+        cfg = readtable('DYNAMate.cfg', 'FileType', 'text', ...
+            'ReadVariableNames', false, 'ReadRowNames', true, 'Delimiter', '\t');
+        OUTPUT.cfg = array2table(table2array(cfg)', ...
+            'VariableNames', cfg.Properties.RowNames);
+        
+        PossibleSaturationCH = find(sum(abs(DATA(:,2:end)) > OUTPUT.cfg.SatThreshold*SCALE));
+        OUTPUT.Data{idx}.Sensor_Config = OUTPUT.Sensor_configuration.Table;
         OUTPUT.Data{idx}.FileName = datfile;
         OUTPUT.Data{idx}.SW_version = SWVersion;
         OUTPUT.Data{idx}.DAQ_version = DAQVersion;
@@ -240,7 +248,7 @@ global PathName OUTPUT wait_window file_progress total_progress
             'Duration', duration, ...
             'Sensors', OUTPUT.Data{idx}.Nsensors, ...
             'Filter', FILTERS_str(filter_selected), 'Scale', SCALE_str, ...
-            'SensorFc', '4.5'));
+            'SensorFc', '4.5', 'SaturationThreshold', OUTPUT.cfg.SatThreshold));
         if(isvalid(wait_window))
             waitbar(total_progress + file_progress*0.3, wait_window, ...
                 [wait_window.UserData 'Processing ' datfile ' data']);
@@ -275,15 +283,19 @@ global PathName OUTPUT
 
     active_ids = find(~strcmp(sensor_config.Name,'NA'))';
     sensor_names = sensor_config.Name(active_ids);
-    sensor_ids = [];
     components = sensor_config.Components(active_ids);
     number_of_sensors = length(active_ids);
     
     if(isTableCol(sensor_config, 'SensorID'))
         sensor_config = sensor_config(active_ids,:);
+        sensorFreq = readtable('sensor_data.csv', 'ReadRowNames',true);
+        sensorFreq = sensorFreq(cellstr(sensor_config.SensorID),:);
+        sensorFreq.Properties.RowNames = {};
     else
         sensor_config = [sensor_config(active_ids,:) ...
-            table(zeros(length(active_ids),1), 'VariableNames', {'SensorID'})];
+            table(repmat('NA', number_of_sensors,1), 'VariableNames', {'SensorID'})];
+        sensorFreq = array2table(4.5*ones(number_of_sensors,3), ...
+            'VariableNames', {'xFc', 'yFc', 'zFc'});
     end
 
     %figure out the order of channels and components
@@ -304,11 +316,14 @@ global PathName OUTPUT
         sensor_names, 'uni', 0);
     names = vertcat(names{:})';
     
+    sensor_config = [sensor_config sensorFreq];
+    freq_vector = reshape(table2array(sensorFreq)',1, numel(sensorFreq));
     OUTPUT.Sensor_configuration.Table = sensor_config;
     OUTPUT.Sensor_configuration.ChannelNames = names;
     OUTPUT.Sensor_configuration.SensorNames = sensor_names;
-    OUTPUT.Sensor_configuration.SensorID = sensor_ids;
+    OUTPUT.Sensor_configuration.SensorID = sensor_config.SensorID;
     OUTPUT.Sensor_configuration.DataChannels = data_channels;
+    OUTPUT.Sensor_configuration.SensorFreqs = freq_vector;
 end
 
 %Process Data
@@ -318,10 +333,11 @@ global OUTPUT wait_window total_progress file_progress
     Ts = 1/Fs;
     N = OUTPUT.Data{idx}.SignalNSamples;
     
-    taper_tau = 0.01*OUTPUT.Data{idx}.SignalDuration;
-    specSmoothN = 256;
-    targetFc = 0.35;
-    corrSteepnes = 6;
+    cfg = OUTPUT.cfg;
+    taper_tau = cfg.taper_tau*OUTPUT.Data{idx}.SignalDuration;
+    specSmoothN = cfg.specSmoothN;
+    targetFc = cfg.targetFc;
+    corrSteepnes = cfg.corrSteepnes;
     
     data = OUTPUT.Data{idx}.DATA.RAW;
     t = OUTPUT.Data{idx}.DATA.Time;
@@ -336,8 +352,8 @@ global OUTPUT wait_window total_progress file_progress
     %Apply taper
     taper = build_taper(t, taper_tau);
     taper = repmat(taper, 1, numCH);
-    data = (data - repmat(mean(data),length(data),1)).*taper;
-    offset = repmat(mean(data),length(data),1);
+    data = (data - repmat(mean(data),N,1)).*taper;
+    offset = repmat(mean(data),N,1);
     data = data - offset;
     
     switch OUTPUT.DoAll
@@ -372,9 +388,16 @@ global OUTPUT wait_window total_progress file_progress
             waitbar(total_progress + file_progress*0.5, wait_window, ...
             [wait_window.UserData 'Correcting Sensor Response']);
         end
-        [data, ~, ~] = FixResponse2(data, -1, targetFc, Fs, ...
+        [data, ~, ~] = FixResponse2(data, ...
+            OUTPUT.Sensor_configuration.SensorFreqs, targetFc, Fs, ...
             OUTPUT.Data{idx}.PossibleSaturationCH, corrSteepnes);
        
+        chan_frqs = targetFc*ones(size(OUTPUT.Sensor_configuration.SensorFreqs));
+        chan_frqs(OUTPUT.Data{idx}.PossibleSaturationCH) = ...
+            OUTPUT.Sensor_configuration.SensorFreqs(OUTPUT.Data{idx}.PossibleSaturationCH);
+        OUTPUT.Data{idx}.Sensor_Config = [OUTPUT.Data{idx}.Sensor_Config ...
+            array2table(reshape(chan_frqs, 3, length(OUTPUT.Sensor_configuration.SensorID))', ...
+            'VariableNames', {'xFc_corrected', 'yFc_corrected', 'zFc_corrected'})];
         OUTPUT.Data{idx}.ConfigTable.SensorFc = targetFc;
     end
     
@@ -527,7 +550,7 @@ global OUTPUT PathName fig
     
     %save CONFIG
     writetable(OUTPUT.Data{idx}.ConfigTable, [base_file '.xlsx']);
-    writetable(OUTPUT.Sensor_configuration.Table, [base_file '.xlsx'], ...
+    writetable(OUTPUT.Data{idx}.Sensor_Config, [base_file '.xlsx'], ...
         'Sheet', 'Sheet1', 'Range', 'A5');
     writetable(OUTPUT.Data{idx}.Stats, [base_file '.xlsx'], ...
         'Sheet', 'Sheet1', 'Range', 'A15', 'WriteRowNames', true);
