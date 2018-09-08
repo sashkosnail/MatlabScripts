@@ -1,4 +1,4 @@
-function output_txt = blah(obj,event_obj)
+function output_txt = data_tip_format(obj,event_obj)
 % Display the position of the data cursor
 % obj          Currently not used (empty)
 % event_obj    Handle to event object

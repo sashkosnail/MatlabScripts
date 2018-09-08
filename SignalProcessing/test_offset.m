@@ -1,19 +1,47 @@
-[t, data, off] = build_test_data;
+global tmp
+
+data = tmp.D;
+t = tmp.T;
+
+Ts = t(2)-t(1);
+Fs = 1/Ts;
+% 
+% Nw = 0.05;
+% Nf = 1*Fs;
+taper_tau = 1;
+% 
+% Apply taper
+taper = build_taper(t, taper_tau);
+taper = repmat(taper, 1, size(data,2));
+%         data = (data - repmat(mean(data),length(data),1)).*taper;
+data = (data - repmat(mean(data),length(data),1)).*taper;
+% remove trend and offset
+% window = hanning(floor(Nw*length(data)));
+% window = repmat(window'/sum(window),1,3);
+% mvmean = movmean(data,window);
+% offset = movmean(mvmean,ones(Nf,1)/Nf); 
+%     offset = repmat(mean(data),length(data),1);
+% data = data - offset;
 
 %%
-figure(55);clf
-plot(t, [off data]);
-hold on
+% figure(55);clf
+% plot(t, [off data]);
+% hold on
 
 %%
-N = 101;
+N = 3*Fs;
 off = filtfilt(triang(N)/sum(triang(N)), 1, data);
-plot(t, off, 'DisplayName', 'filtfilt');
+plot(t, off);
 
 %%
-N = 301;
-mvmean = movmean(data,triang(N));
-plot(t, mvmean, 'DisplayName', 'movmean');
+N = 5*Fs;
+off = movmean(data, rectwin(N));
+plot(t, off);
+
+%%
+N = 5*Fs;
+mvmean = movmean(off,rectwin(N));
+plot(t, mvmean);
 
 %%
 window_size = 0.05;

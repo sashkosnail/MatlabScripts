@@ -26,6 +26,10 @@ function corrected = FixResponse(data, sensorNum, targetF, Fs)
 end
 
 function freqs = GetCornerFreqs(sensorNum)
-    freqs = 4.5*ones(1, length(sensorNum));
+    if(sensorNum == -1)
+        freqs = 4.5*ones(1, length(sensorNum));
+    else
+        freqs = 4.5*ones(1, 3*length(sensorNum));
+    end
 end
 

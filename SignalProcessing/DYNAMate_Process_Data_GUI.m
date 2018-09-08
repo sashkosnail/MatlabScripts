@@ -1,25 +1,28 @@
 %UI setup
 function DYNAMate_Process_Data_GUI(varargin)
 clearvars -global OUTPUT
-global OUTPUT PathName tab_group wait_window
+global OUTPUT PathName tab_group wait_window fig
     version = 'v1.5.0';
-    if(isempty(PathName) || ~exist(PathName, 'dir'))
+    if(isempty(PathName) || sum(PathName == 0) || ~exist(PathName, 'dir'))
         PathName = [pwd '\']; 
     end
     wait_window = waitbar(0,'Please wait...');
     wait_window.Children.Title.Interpreter = 'none';
     fig = figure(9999);
     set(fig, 'DeleteFcn', @figure_close_cb, 'NumberTitle', 'off', ...
-        'Name', ['DYNAMate Process ' version], 'MenuBar', 'none'); 
+        'Name', ['DYNAMate Process ' version], 'MenuBar', 'none', 'ToolBar', 'figure'); 
     clf
     pause(0.00001);
-    set(fig, 'ToolBar', 'figure', 'Units', 'Normalized', ...
-        'OuterPosition', [0 0 1 1]);
+%     set(fig, 'ToolBar', 'figure', 'Units', 'Normalized', ...
+%         'OuterPosition', [0 0 1 1]);
+    WindowAPI(fig, 'Maximize');
+    WindowAPI(wait_window, 'TopMost');
     
     tab_group = uitabgroup('Parent', fig, 'Units', 'normalized', ...
         'Position', [0 0, 1, 1], 'SelectionChangedFcn', @tab_changed_callback);
     
     figure(wait_window)
+    waitbar(0.05, wait_window, 'Select Input Files');
     [FileName, PathName, ~] = uigetfile([PathName, '*.tdms'], ...
         'Pick File','MultiSelect','on');
     
@@ -42,9 +45,9 @@ global OUTPUT tab_group wait_window file_progress total_progress
     signal_length = OUTPUT.Data{idx}.SignalNSamples;
     num_sensors = OUTPUT.Data{idx}.Nsensors;
     %create parameters
-    window_size = signal_length-Fs*2;%min(4096, signal_length);
+    window_size = signal_length;%-Fs*2;%min(4096, signal_length);
     window_center = signal_length/(2*Fs);
-    smoothN = 5;
+    smoothN = 0;
     
     %create UI controls
     overview_text = uitable('Parent', tab);
@@ -59,7 +62,7 @@ global OUTPUT tab_group wait_window file_progress total_progress
     overview_text.Units = 'normalized';
     
     data_type_pd = uicontrol('Parent', tab, 'Style', 'popupmenu',...
-        'Units', 'normalized', 'Position', [0 0.98 0.1 0.02], ...
+        'Units', 'normalized', 'Position', [0 0.98 0.05 0.02], ...
         'Value', 2, 'String', {'Acceleration', 'Velocity', 'Displacement'}, ...
         'ToolTipString', 'Window Center Time', 'Callback', @data_type_pd_callback); %#ok<NASGU>
     
@@ -108,10 +111,10 @@ global OUTPUT tab_group wait_window file_progress total_progress
     for id = 0:1:num_sensors - 1
         ch_axis{id+1}.SignalAxis = subplot('Position', ...
             [0.02, plot_vert_size*id+0.05, 0.71, plot_vert_size], ...
-            'Xgrid', 'on', 'Ygrid', 'on', 'Color', 'w');
+            'Xgrid', 'on', 'Ygrid', 'on', 'Color', 'w', 'Parent', tab);
         ch_axis{id+1}.SpectrumAxis = subplot('Position', ...
             [0.75, plot_vert_size*id+0.05, 0.245, plot_vert_size], ...
-            'Xgrid', 'on', 'Ygrid', 'on', 'Color', 'w');
+            'Xgrid', 'on', 'Ygrid', 'on', 'Color', 'w', 'Parent', tab);
     end
     
     %set user data object
@@ -169,7 +172,7 @@ global PathName OUTPUT wait_window file_progress total_progress
         %extract data from data file
         Dtable = TDMSStruct.DATA;
         Fs = 1/(Dtable{2,1}-Dtable{1,1});
-        duration = Dtable{end,1}-Dtable{1,1}+1/Fs;
+        duration = round(Dtable{end,1}-Dtable{1,1}+1/Fs);
         DATA = Dtable{:,[1 OUTPUT.Sensor_configuration.DataChannels]};
         CONFIG = Dtable{:,26:end};
         
@@ -191,6 +194,8 @@ global PathName OUTPUT wait_window file_progress total_progress
             SCALE_str = SCALES_str2{scale_selected};
             SCALE = SCALES_2(scale_selected);
         end
+          
+        PossibleSaturationCH = find(sum(abs(DATA(:,2:end)) > 0.99*SCALE));
         
         OUTPUT.Data{idx}.FileName = datfile;
         OUTPUT.Data{idx}.SW_version = SWVersion;
@@ -198,7 +203,9 @@ global PathName OUTPUT wait_window file_progress total_progress
         OUTPUT.Data{idx}.Fs = Fs;
         OUTPUT.Data{idx}.SignalDuration = duration;
         OUTPUT.Data{idx}.SignalNSamples = length(DATA);
-        OUTPUT.Data{idx}.DATA.Velocity = DATA(:,2:end);
+        OUTPUT.Data{idx}.PossibleSaturationCH = PossibleSaturationCH;
+        OUTPUT.Data{idx}.DATA.RAW = DATA(:,2:end);
+        OUTPUT.Data{idx}.DATA.Velocity= [];
         OUTPUT.Data{idx}.DATA.Acceleration = [];
         OUTPUT.Data{idx}.DATA.Displacement = [];
         OUTPUT.Data{idx}.DATA.Time = DATA(:,1);
@@ -233,23 +240,32 @@ end
 
 function read_sensor_config()
 global PathName OUTPUT
+    isTableCol=@(t, thisCol) ismember(thisCol, t.Properties.VariableNames);
     if(exist([PathName 'sensor_configuration.txt'], 'file'))
-        sensor_config = readtable([PathName 'sensor_configuration.txt'], ...
-            'Format','%d%s%s', 'Delimiter', '\t', 'MultipleDelimsAsOne', 1);
+        ds = datastore([PathName 'sensor_configuration.txt'], ...
+            'Delimiter','\t','MultipleDelimitersAsOne',true);
+        sensor_config = read(ds);
         %trim table if too large
         sensor_config = sensor_config(1:min(height(sensor_config),8),:);
     else
         %default config
         sensor_config = table((1:8)', cellstr(strcat('s',num2str((1:8)'))), ...
             cellstr(repmat('xyz',8,1)), ...
-            'VariableNames',{'Ch','Name','Components'});
+            'VariableNames',{'Channel','Name','Components'});
     end
 
-    active_ids = find(~strcmp(sensor_config.Name,'0'))';
+    active_ids = find(~strcmp(sensor_config.Name,'NA'))';
     sensor_names = sensor_config.Name(active_ids);
     sensor_ids = [];
     components = sensor_config.Components(active_ids);
     number_of_sensors = length(active_ids);
+    
+    if(isTableCol(sensor_config, 'SensorID'))
+        sensor_config = sensor_config(active_ids,:);
+    else
+        sensor_config = [sensor_config(active_ids,:) ...
+            table(zeros(length(active_ids),1), 'VariableNames', {'SensorID'})];
+    end
 
     %figure out the order of channels and components
     data_channels = zeros(1, 3*number_of_sensors);
@@ -263,10 +279,10 @@ global PathName OUTPUT
         %add one to skip over time column and append to final vector
         data_channels((sensor*3-2):(sensor*3)) = comp_set + 1;
     end
-    sensor_config = [sensor_config(active_ids,:) ...
-        table(reshape(data_channels,3,[])', 'VariableNames', {'ColumnsUsed'})];
-    names = cellfun(@(c,i) strcat(c, {'_X_';'_Y_';'_Z_'}, num2str(i)), ...
-        sensor_names, num2cell(active_ids)', 'uni', 0);
+    sensor_config = [sensor_config ...
+        table(reshape(data_channels,3,[])', 'VariableNames', {'ChannelsUsed'})];
+    names = cellfun(@(c) strcat(c, {'_X';'_Y';'_Z'}), ...
+        sensor_names, 'uni', 0);
     names = vertcat(names{:})';
     
     OUTPUT.Sensor_configuration.Table = sensor_config;
@@ -283,39 +299,73 @@ persistent fix_response
     Ts = 1/Fs;
     
     Nw = 0.05;
-    Nf = 5*Fs;
-    taper_tau = 1.0;
+    Nf = 1*Fs;
+    taper_tau = 1;
     
-    data = OUTPUT.Data{idx}.DATA.Velocity;
+    data = OUTPUT.Data{idx}.DATA.RAW;
     t = OUTPUT.Data{idx}.DATA.Time;
+    
     if(isvalid(wait_window))
         waitbar(total_progress + file_progress*0.4, wait_window, ...
             [wait_window.UserData 'Removing Trend and Offset']);
     end
+    
+    %Apply taper
+    taper = build_taper(t, taper_tau);
+    taper = repmat(taper, 1, size(data,2));
+%         data = (data - repmat(mean(data),length(data),1)).*taper;
+    data = (data - repmat(mean(data),length(data),1)).*taper;
     %remove trend and offset
 %     window = hanning(floor(Nw*length(data)));
 %     window = repmat(window'/sum(window),1,3);
 %     mvmean = movmean(data,window);
 %     offset = movmean(mvmean,ones(Nf,1)/Nf); 
     offset = repmat(mean(data),length(data),1);
+%     N = 30*Fs;
+%     off = movmean(data, rectwin(N));
+%     offset = movmean(off,rect5win(N));
     data = data - offset;
     
-%     if(strcmp('Yes', questdlg(...
-%             'Do you want to correct sensor reponse to 0.5Hz', ...
-%             'Sensor Correction', 'Yes', 'No', 'No')))
+%     %Plot Offsets
+%     fff = figure;
+%     fff.Name = OUTPUT.Data{idx}.FileName;
+% %     subplot(7,1,1)
+%     plot(t, offset)
+% %     for n=1:1:6
+% %         subplot(7,1,n+1)
+% %         plot(t, [data(:,n) offset(:,n)])
+% %         grid on
+% %     end
+    
+    targetFc = 0.35;
+    if(strcmp('Yes', questdlg(...
+            ['Correct sensor reponse to ' num2str(targetFc) 'Hz?'], ...
+            'Sensor Correction', 'Yes', 'No', 'No')))
+        if(OUTPUT.Data{idx}.PossibleSaturationCH)
+            msg = strjoin([{'Possible Saturation Detected on these Channels:'} ...
+                OUTPUT.Sensor_configuration.ChannelNames(...
+                OUTPUT.Data{idx}.PossibleSaturationCH) ...
+                {'Sensor freqeuncy correction is DISABLED for these channels'}],'\n');
+            sat_win = warndlg(msg, 'Possible Saturation');
+            WindowAPI(sat_win,'TopMost');
+        end
         if(isvalid(wait_window))
             waitbar(total_progress + file_progress*0.5, wait_window, ...
             [wait_window.UserData 'Correcting Sensor Response']);
         end
-        targetFc = 0.1;
-        %Apply taper
-        taper = build_taper(t, taper_tau);
-        taper = repmat(taper, 1, size(data,2));
-        data = (data - repmat(mean(data),length(data),1)).*taper;
-        data = (data - repmat(mean(data),length(data),1)).*taper;
-        data = FixResponse(data, -1, targetFc, Fs);
+        [data, f, correction] = FixResponse2(data, -1, targetFc, Fs, ...
+            OUTPUT.Data{idx}.PossibleSaturationCH);
+       
         OUTPUT.Data{idx}.ConfigTable.SensorFc = targetFc;
-%     end
+        
+%         cf = figure(999);
+%         cf.Name = 'Correction Curve';
+%         loglog(f(1:floor(length(f)/2)), correction(1:floor(length(f)/2),1), 'k');
+%         hold on; grid on
+%         axs = gca;
+%         loglog(targetFc*[1 1], axs.YLim, 'r');
+%         loglog(4.5*[1 1], axs.YLim, 'g');
+    end
     
     if(isvalid(wait_window))
         waitbar(total_progress + file_progress*0.55, wait_window, ...
@@ -373,7 +423,6 @@ end
 function fftdata = getFFT(data, tab)
     N = tab.UserData.window_size;
     applyHamming = tab.UserData.applyHamming;
-    specSmoothN = tab.UserData.smoothN;
     
     if(applyHamming)
         window_function = hamming(N);
@@ -382,17 +431,14 @@ function fftdata = getFFT(data, tab)
     end
     window_function = repmat(window_function/max(window_function), ...
             1, size(data,2));
-    fftdata = abs(fft(data.*window_function, N, 1)./N);
-    fftdata = abs(fftdata(ceil(1:N/2),:));
+    fftdata = abs(fft(data.*window_function)./N);
+    fftdata = abs(fftdata(ceil(1:N/2+1),:));
     fftdata(2:end-1,:) = 2*fftdata(2:end-1,:);
-    if(specSmoothN ~= 1)
-        fftdata = filtfilt(ones(1,specSmoothN)./specSmoothN,1,fftdata);
-    end
 end
 
 %Plot Data
 function plot_tab_data(tab)
-global OUTPUT
+global OUTPUT fig
     idx = tab.UserData.DataIDX;
     t = OUTPUT.Data{idx}.DATA.Time;
     switch tab.UserData.AccVelDisp
@@ -403,7 +449,6 @@ global OUTPUT
         otherwise
             data = OUTPUT.Data{idx}.DATA.Velocity;
     end
-    
     ax = tab.UserData.FullPlot;cla(ax);
     y_limits = [min(min(data)); max(max(data))]; 
     tab.UserData.VertBarsH = [y_limits y_limits];
@@ -418,7 +463,7 @@ global OUTPUT
 end
 
 function plot_channel_data(tab)
-global OUTPUT
+global OUTPUT fig
     idx = tab.UserData.DataIDX;
     Fs = OUTPUT.Data{idx}.Fs;
     window_data_id = tab.UserData.CurrentWindow(1):1:tab.UserData.CurrentWindow(2);
@@ -431,7 +476,7 @@ global OUTPUT
         otherwise
             data = OUTPUT.Data{idx}.DATA.Velocity(window_data_id,:);
     end
-    
+    figure(fig)
     %Signal Plot
     colors = [0 114 189; 217 83 25; 237 177 32]./255;
     components = 'XYZ';
@@ -494,8 +539,15 @@ global OUTPUT
     l.FontWeight = 'bold';
     %Spectrum Plot
     fftdata = getFFT(data, tab);
-    f = Fs*(1:tab.UserData.window_size/2)'/tab.UserData.window_size;
-    fft_range = [min(min(abs(fftdata))) max(max(abs(fftdata)))];
+    f = Fs*(0:(tab.UserData.window_size)/2)'/tab.UserData.window_size;
+    
+    specSmoothN = tab.UserData.smoothN;
+    if(specSmoothN ~= 0)
+        fftdata = smoothFFT(fftdata, specSmoothN, f);
+    end
+    
+    fft_range = [max(10^-4, min(min(abs(fftdata(2:end,:))))) ...
+        max(max(abs(fftdata(2:end,:))))];
     for idx = 0:1:num_sensors - 1
         data_id = ((num_sensors -1 - idx)*3 + 1):((num_sensors - idx)*3);
         ax = tab.UserData.ChannelAxis{idx+1}.SpectrumAxis;
@@ -504,8 +556,8 @@ global OUTPUT
         set(ax, 'Color', 'w', 'GridColor', 'k', ...
             'XAxisLocation', 'bottom', 'NextPlot', 'add', ...
             'XGrid', 'on', 'YGrid', 'on', 'GridLineStyle', '-', ...
-            'GridColor', 'k', 'YLim', fft_range, 'YTick', 10.^(-4:1:4), ...
-            'XLim', [max(0.1, f(1)), f(end)], 'XTick', [0.01 0.1 1 10 100], ...
+            'GridColor', 'k', 'YLim', fft_range, 'YTick', 10.^(-10:1:5), ...
+            'XLim', [max(0.05, f(2)), f(end)], 'XTick', 10.^(-2:1:2), ...
             'XScale', 'log', 'YScale', 'log');
 
         if(idx==0)
@@ -636,64 +688,76 @@ global OUTPUT
 end
 
 function savebutton_callback(hObject, ~)
-%     fig = hObject.Parent;
-%     time_tb = hObject.UserData;
-%     default_name = fig.Name;
-%     default_name(isspace(default_name))=[];
-%     dash_idx = find(default_name=='-') - 1;
-%     default_name = [default_name(1:dash_idx), '_', time_tb.String, ...
-%         '_', default_name(dash_idx+2:end)];
-%     
-%     [FileName,PathName_save] = uiputfile('*.png', 'Save Results', ...
-%         [PathName, default_name]);
-%     if(FileName == 0) ;return; end
-%     
-%     export_fig(strcat(PathName_save, FileName(1:end-4)), ...
-%         '-c[20 0 0 0]', fig);
-%     writetable(STATS, [PathName_save, FileName(1:end-4),'.xlsx'], ...
-%         'WriteRowNames', 1);
-%     
-%     savefig(fig,strcat(PathName_save, fig.Name),'compact');
-%     csvwrite([PathName_save, fig.Name,'.csv'], ...
-%         [(0:1:length(data)-1)'/Fs data]);
-global OUTPUT PathName
+global OUTPUT PathName fig
     idx = hObject.Parent.UserData.DataIDX;
     wait_window = waitbar(0,'Saving, please wait...');
-    base_file = 'D:\Documents\PhD\FieldStudies\SaudiData\OUT\0.2Hz\EG2\';
-    test_name = 'Test6';
+    WindowAPI(wait_window, 'TopMost');
     source_file = OUTPUT.Data{idx}.FileName(1:end-5);
-    file = [base_file test_name '_' source_file];
+    file = [PathName source_file];
+    
+    [FileName, PathName, ~] = uiputfile('*.xlsx', 'Save Data', [file '.xlsx']);
+        dot_index = strfind(FileName,'.');
+    if(isempty(dot_index))
+        dot_index = length(FileName);
+    else
+        dot_index = dot_index(end)-1;
+    end
+    
+    base_file = [PathName FileName(1:dot_index)];
+    
+    WindowAPI(fig, 'position', 'full')
+    WindowAPI(fig, 'clip', true);
+    export_fig([base_file '.png'], '-c[25 0 0 0]', fig);
+    WindowAPI(fig, 'position', 'work')
+    WindowAPI(fig, 'clip', false);
+    WindowAPI(fig, 'maximize');
+    waitbar(0.1, wait_window, 'Saving, please wait...');
+    
+    writetable(OUTPUT.Data{idx}.ConfigTable, [base_file '.xlsx']);
+    writetable(OUTPUT.Sensor_configuration.Table, [base_file '.xlsx'], ...
+        'Sheet', 'Sheet1', 'Range', 'A5');
+    writetable(OUTPUT.Data{idx}.Stats, [base_file '.xlsx'], ...
+        'Sheet', 'Sheet1', 'Range', 'A15', 'WriteRowNames', true);
+    
+    tbl = [OUTPUT.Data{idx}.DATA.Time OUTPUT.Data{idx}.DATA.Acceleration];
+    tbl = array2table(tbl);
+    writetable(tbl, [base_file '.xlsx'], 'Sheet', 'Acceleration');
+    xlswrite([base_file '.xlsx'], ['Time[s]', ...
+        cellfun(@(c) strcat(c, '[m/s^2]'), ...
+        OUTPUT.Sensor_configuration.ChannelNames, 'uni', 0)], ...
+        'Acceleration', 'A1');
+    
+    waitbar(0.4, wait_window, 'Saving, please wait...');
+    
+    tbl = [OUTPUT.Data{idx}.DATA.Time OUTPUT.Data{idx}.DATA.Velocity];
+    tbl = array2table(tbl);
+    writetable(tbl, [base_file '.xlsx'], 'Sheet', 'Velocity');
+    xlswrite([base_file '.xlsx'], ['Time[s]', ...
+        cellfun(@(c) strcat(c, '[mm/s]'), ...
+        OUTPUT.Sensor_configuration.ChannelNames, 'uni', 0)], ...
+        'Velocity', 'A1');
+    
+    waitbar(0.7, wait_window, 'Saving, please wait...');
+    
+    tbl = [OUTPUT.Data{idx}.DATA.Time OUTPUT.Data{idx}.DATA.Displacement];
+    tbl = array2table(tbl);
+    writetable(tbl, [base_file '.xlsx'], 'Sheet', 'Displacement');
+    xlswrite([base_file '.xlsx'], ['Time[s]', ...
+        cellfun(@(c) strcat(c, '[mm]'), ...
+        OUTPUT.Sensor_configuration.ChannelNames, 'uni', 0)], ...
+        'Displacement', 'A1');
+    
+    waitbar(0.9, wait_window, 'Saving, please wait...');
+    
 %     writetable(OUTPUT.Data{idx}.DATA.App, [file '_App.xlsx'], ...
 %         'WriteRowNames', true)
 %     writetable(OUTPUT.Data{idx}.DATA.Vpp, [file '_Vpp.xlsx'], ...
 %         'WriteRowNames', true)
 %     writetable(OUTPUT.Data{idx}.DATA.Dpp, [file '_Dpp.xlsx'], ...
 %     'WriteRowNames', true)
-    waitbar(0.1, wait_window, 'Saving, please wait...');
-    tbl = [OUTPUT.Data{idx}.DATA.Time OUTPUT.Data{idx}.DATA.Acceleration];
-    tbl = array2table(tbl);
-    writetable(tbl, [file '.xlsx'], 'Sheet', 'Acceleration');
-    xlswrite([file '.xlsx'], ['Time[s]', ...
-        cellfun(@(c) strcat(c, '[m/s^2]'), ...
-        OUTPUT.Sensor_configuration.ChannelNames, 'uni', 0)], ...
-        'Acceleration', 'A1');
-    waitbar(0.4, wait_window, 'Saving, please wait...');
-    tbl = [OUTPUT.Data{idx}.DATA.Time OUTPUT.Data{idx}.DATA.Velocity];
-    tbl = array2table(tbl);
-    writetable(tbl, [file '.xlsx'], 'Sheet', 'Velocity');
-    xlswrite([file '.xlsx'], ['Time[s]', ...
-        cellfun(@(c) strcat(c, '[mm/s]'), ...
-        OUTPUT.Sensor_configuration.ChannelNames, 'uni', 0)], ...
-        'Velocity', 'A1');
-    waitbar(0.7, wait_window, 'Saving, please wait...');
-    tbl = [OUTPUT.Data{idx}.DATA.Time OUTPUT.Data{idx}.DATA.Displacement];
-    tbl = array2table(tbl);
-    writetable(tbl, [file '.xlsx'], 'Sheet', 'Displacement');
-    xlswrite([file '.xlsx'], ['Time[s]', ...
-        cellfun(@(c) strcat(c, '[mm]'), ...
-        OUTPUT.Sensor_configuration.ChannelNames, 'uni', 0)], ...
-        'Displacement', 'A1');
+
     waitbar(1, wait_window, 'Saving, please wait...');
+    
     disp('Save Complete')
     delete(wait_window);
 end
@@ -722,6 +786,23 @@ end
 function tab_changed_callback(~, ~)
 end
 
+%helpers
+function deleteExcelSheets(file)
+    sheetName = 'Sheet'; % EN: Sheet, DE: Tabelle, etc. (Lang. dependent)
+    % Open Excel file.
+    objExcel = actxserver('Excel.Application');
+    objExcel.Workbooks.Open(file); % Full path is necessary!
+    % Delete sheets.
+    try
+          % Throws an error if the sheets do not exist.
+          objExcel.ActiveWorkbook.Worksheets.Item(sheetName).Delete;
+          objExcel.ActiveWorkbook.Worksheets.Item([sheetName '1']).Delete;
+          objExcel.ActiveWorkbook.Worksheets.Item([sheetName '2']).Delete;
+          objExcel.ActiveWorkbook.Worksheets.Item([sheetName '3']).Delete;
+    catch
+          ; % Do nothing.
+    end
+end
 
 %         disp('===============================================================');
 %         disp(datfile)
