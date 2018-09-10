@@ -20,7 +20,6 @@ global OUTPUT PathName tab_group wait_window fig
         'Name', ['DYNAMate Process ' version], 'MenuBar', 'none', ...
         'Position', [0 0 maxsize], 'SizeChangedFcn', figszfun);
     pause(0.00001);
-    WindowAPI(fig, 'Maximize');
     
     tab_group = uitabgroup('Parent', fig, 'Units', 'normalized', ...
         'Position', [0 0, 1, 1]);
@@ -55,6 +54,7 @@ global OUTPUT PathName tab_group wait_window fig
         delete(fig)
         return
     end
+    WindowAPI(fig, 'Maximize');
 end
 
 function createNewTab(idx)
@@ -68,71 +68,74 @@ global OUTPUT tab_group wait_window file_progress total_progress
     %create UI controls
     start_position = [20 2];
 
-    next_size = [130 35];
+    next_size = [100 35];
     data_type_pd = uicontrol('Parent', tab, 'Style', 'popupmenu',...
         'Units', 'pixels', 'Position', [start_position next_size], ...
-        'FontSize', 10, 'FontWeight', 'bold', ...
+        'FontSize', 8, 'FontWeight', 'bold', ...
         'Value', 2, 'String', {'Acceleration', 'Velocity', 'Displacement'}, ...
         'Callback', @data_type_pd_callback); %#ok<NASGU>
-    start_position(1) = start_position(1) + next_size(1) + 20;
+    start_position(1) = start_position(1) + next_size(1) + 10;
 
-    next_size = [100 40];
+    next_size = [80 40];
     save_button = uicontrol('Parent', tab, 'Style', 'pushbutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
         'Callback', @save_data_button_callback, 'String', 'Save Data', ...
         'FontSize', 10, 'FontWeight', 'bold', 'Tag', 'data'); %#ok<NASGU>
     start_position(1) = start_position(1) + next_size(1) + 5;
-    
-    next_size = [100 40];
+
+    next_size = [80 40];
     save_button = uicontrol('Parent', tab, 'Style', 'pushbutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
         'Callback', @save_image_button_callback, 'String', 'Save Image', ...
         'FontSize', 10, 'FontWeight', 'bold', 'Tag', 'image'); %#ok<NASGU>
     start_position(1) = start_position(1) + next_size(1) + 5;
-    
-    next_size = [100 40];
+
+    next_size = [80 40];
     zoom_button = uicontrol('Parent', tab, 'Style', 'togglebutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
         'Callback', @zoom_button_callback, 'String', 'Zoom', ...
         'FontSize', 10, 'FontWeight', 'bold', ...
         'ToolTip', 'Hold SHIFT for Zooming out'); 
     start_position(1) = start_position(1) + next_size(1) + 5;
-    
-    next_size = [100 40];
+
+    next_size = [80 40];
     pan_button = uicontrol('Parent', tab, 'Style', 'togglebutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
         'Callback', @pan_button_callback, 'String', 'Pan', ...
         'FontSize', 10, 'FontWeight', 'bold'); 
     start_position(1) = start_position(1) + next_size(1) + 5;
-    
-    next_size = [100 40];
+
+    next_size = [80 40];
     datatip_button = uicontrol('Parent', tab, 'Style', 'togglebutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
         'Callback', @datatip_button_callback, 'String', 'Data Tip', ...
         'FontSize', 10, 'FontWeight', 'bold', ...
         'ToolTip', 'Hold SHIFT to add more then one'); 
-    start_position(1) = start_position(1) + next_size(1) + 20;
+    start_position(1) = start_position(1) + next_size(1) + 10;
 
-    next_size = [100 40];
+    next_size = [80 40];
     exit_button = uicontrol('Parent', tab, 'Style', 'pushbutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
         'Callback', @exit_button_callback, 'String', 'Exit', ...
         'FontSize', 10, 'FontWeight', 'bold'); %#ok<NASGU>
-    start_position(1) = start_position(1) + next_size(1) + 20;
-    
+    start_position(1) = start_position(1) + next_size(1) + 10;
+
     zoom_button.UserData = [pan_button datatip_button];
     pan_button.UserData = [zoom_button datatip_button];
     datatip_button.UserData = [pan_button zoom_button];
 
-    overview_text = uitable('Parent', tab);
-    overview_text.Data = table2cell(OUTPUT.Data{idx}.ConfigTable(:,2:end));
-    overview_text.ColumnName = ...
+    widths.Min = [50, 50, 30, 60, 40, 20, 40, 40, 40, 40, 40, 40, 40];
+    widths.Max = [80, 75, 30, 70, 60, 60, 45, 45, 65, 125, 65, 140, 125];
+    config_table = uitable('Parent', tab, 'UserData', widths);
+    config_table.Data = table2cell(OUTPUT.Data{idx}.ConfigTable(:,2:end));
+    config_table.ColumnName = ...
         OUTPUT.Data{idx}.ConfigTable.Properties.VariableNames(2:end);
-    overview_text.ColumnWidth = {70, 60, 30, 60, 50, 50, 40, 50, 60, 60, 60, 60, 60};
-    next_size = [sum(cell2mat(overview_text.ColumnWidth))+2 40];
-    overview_text.Units = 'pixels';
-    overview_text.Position = [start_position next_size];
-    overview_text.RowName = [];
+    column_widths = config_table.UserData.Min;
+    config_table.ColumnWidth = num2cell(column_widths);
+    next_size = [sum(column_widths)+2 40];
+    config_table.Units = 'pixels';
+    config_table.Position = [start_position next_size];
+    config_table.RowName = [];
     
     %Plot Panel
     parent_size = tab.Position;
@@ -140,13 +143,8 @@ global OUTPUT tab_group wait_window file_progress total_progress
     axis_panel = uipanel('Parent', tab, 'Units', 'pixels', ...
         'BorderWidth', 0, 'BorderType', 'none', ...
         'Position', [0 panelH parent_size(3) parent_size(4) - panelH]);
-    tab.UserData.Panel = axis_panel;
-    tabszfun = @(h,~) set(h.UserData.Panel, ...
-        'position', [0 panelH h.Position(3) h.Position(4)-panelH]);
-    tab.SizeChangedFcn = tabszfun;
-    drawnow();
+
     %create axis
-    ch_axis.Spacing = [40 25];
     for id = 0:1:num_sensors - 1
         ch_axis.SignalAxis(id+1) = subplot('Position', [0 0 0 0], ...
             'Units', 'pixels', 'Parent', axis_panel, 'Xgrid', 'on', ...
@@ -159,13 +157,14 @@ global OUTPUT tab_group wait_window file_progress total_progress
     linkaxes(ch_axis.SpectrumAxis);
     
     axis_panel.UserData = ch_axis;
-    axis_panel.SizeChangedFcn = @panel_szChange;
     
     %set user data object
     tab.UserData = struct('Units', '[mm/s]', 'DataIDX', idx, ...
-        'AccVelDisp', 2, 'ChannelAxis', ch_axis, 'Panel', axis_panel);
+        'AccVelDisp', 2, 'ChannelAxis', ch_axis, ...
+        'Panel', axis_panel, 'Table', config_table);
+    tab.SizeChangedFcn = @tab_szChange;
+    tab_szChange(tab);
     drawnow()
-    panel_szChange(axis_panel);
     
     if(isvalid(wait_window))
         waitbar(total_progress + file_progress*0.9, wait_window, ...
@@ -185,6 +184,11 @@ global PathName OUTPUT wait_window file_progress total_progress
     OUTPUT.Data = cell(length(OUTPUT.Source_FileName),1);
     file_progress = 1/length(OUTPUT.Source_FileName);
     total_progress = 0;
+    %Redundant read, future proof for config in TDMS
+        if(read_sensor_config() == -1)
+            res = -1;
+            return;
+        end
     for idx = 1:1:length(OUTPUT.Source_FileName)
         datfile = OUTPUT.Source_FileName{idx}; 
         if(isvalid(wait_window))
@@ -209,12 +213,6 @@ global PathName OUTPUT wait_window file_progress total_progress
             SWVersion = TDMSStruct.Properties.SoftwareVersion;
         end
         oldDAQ = strcmp(DAQVersion, '1.0');
-        
-        %Redundant read, future proof for config in TDMS
-        if(read_sensor_config() == -1)
-            res = -1;
-            return;
-        end
         
         %extract data from data file
         Dtable = TDMSStruct.DATA;
@@ -592,7 +590,7 @@ global OUTPUT fig
     l.Position = ceil([pos(1)+pos(3)-cp(3) pos(2)+pos(4)-cp(4) cp(3:4)]); 
     l.FontWeight = 'bold';
     ax.UserData = l;
-    
+    panel_szChange(tab.UserData.Panel);    
 end
 
 %UI CALLBACKS
@@ -779,23 +777,55 @@ end
 
 function figure_close_cb(~, ~)
 global wait_window
-    if(isvalid(wait_window))
+    if(ishandle(wait_window) || isvalid(wait_window))
         delete(wait_window)
+    end
+end
+
+function tab_szChange(hObject,~)
+    if(isfield(hObject.UserData, 'Panel'))
+        panelM = 42;
+        tabsize = hObject.Position;
+        set(hObject.UserData.Panel, ...
+            'position', [0 panelM tabsize(3) tabsize(4)-panelM]);
+        panel_szChange(hObject.UserData.Panel);
+    end
+    
+    if(isfield(hObject.UserData, 'Table'))
+        tbl = hObject.UserData.Table;
+        tblsize = tbl.Position;
+        new_size = tbl.UserData.Min;
+        while(1)
+            free_space = tabsize(3) - sum(new_size) - tblsize(1) - 15;
+            toadd = tbl.UserData.Max-new_size;
+            possible_add = toadd>0;
+            if(~sum(possible_add))
+                break;
+            end
+            min_add = sum(toadd>0);
+            times_add = min(toadd(toadd~=0));
+            times_add = min(times_add, floor(free_space/min_add));
+            if(times_add<=0)
+                break;
+            end
+            new_size = new_size + times_add.*possible_add;
+        end
+        tbl.ColumnWidth = num2cell(new_size);
+        tbl.Position(3) = sum(new_size)+2;
     end
 end
 
 function panel_szChange(hObject, ~)
 global OUTPUT
-    if(isempty(OUTPUT))
-        return;
-    end
     num_sensors = OUTPUT.Data{1}.Nsensors;
     parent_size = hObject.Position;
     ch_axis = hObject.UserData;
+    
+    ch_axis.Spacing = [40 27];
 
     plotL = ch_axis.Spacing(1);
     plotHsig = floor(0.7*parent_size(3));
-    plotHfft = parent_size(3) - 2*plotL - plotHsig -1 ;
+    plotHfft = parent_size(3) - 2*plotL - plotHsig;
 
     plotV = parent_size(4) - ch_axis.Spacing(2);
     plotB = ch_axis.Spacing(2) + rem(plotV, num_sensors);
@@ -807,12 +837,11 @@ global OUTPUT
     ch_axis.SpectrumAxis(id+1).Position = ...
                     [2*plotL+plotHsig, plotV*id+plotB, plotHfft, plotV];
     end
-    
     l = ch_axis.SignalAxis(id+1).UserData;
     if(~isempty(l))
-        pos = ch_axis.SignalAxis(id+1).Position;
-        cp = l.Position;
-        l.Position = ceil([pos(1)+pos(3)-cp(3) pos(2)+pos(4)-cp(4) cp(3:4)]); 
+        cp = ch_axis.SignalAxis(id+1).Position;
+        lp = l.Position;
+        l.Position = ceil([cp(1)+cp(3)-lp(3) cp(2)+cp(4)-lp(4) lp(3:4)]); 
     end
 end
 

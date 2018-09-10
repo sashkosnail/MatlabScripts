@@ -1,6 +1,5 @@
 
 function testGUI
-%%
     close all
     global OUTPUT
     fig = figure(1);
@@ -78,27 +77,27 @@ function testGUI
     pan_button.UserData = [zoom_button datatip_button];
     datatip_button.UserData = [pan_button zoom_button];
 
-    overview_text = uitable('Parent', tab);
-    overview_text.Data = table2cell(OUTPUT.Data{1}.ConfigTable(:,2:end));
-    overview_text.ColumnName = ...
+    widths.Min = [50, 50, 30, 60, 40, 20, 40, 40, 40, 40, 40, 40, 40];
+    widths.Max = [80, 75, 30, 70, 60, 60, 45, 45, 65, 125, 65, 140, 125];
+    config_table = uitable('Parent', tab, 'UserData', widths);
+    config_table.Data = table2cell(OUTPUT.Data{1}.ConfigTable(:,2:end));
+    config_table.ColumnName = ...
         OUTPUT.Data{1}.ConfigTable.Properties.VariableNames(2:end);
-    column_widths = [50, 50, 30, 60, 40, 20, 40, 40, 40, 40, 40, 40, 40];
-    overview_text.ColumnWidth = num2cell(column_widths);
+    column_widths = config_table.UserData.Min;
+    config_table.ColumnWidth = num2cell(column_widths);
     next_size = [sum(column_widths)+2 40];
-    overview_text.Units = 'pixels';
-    overview_text.Position = [start_position next_size];
-    overview_text.RowName = [];
+    config_table.Units = 'pixels';
+    config_table.Position = [start_position next_size];
+    config_table.RowName = [];
     
     %Plot Panel
     parent_size = tab.Position;
     panelH = 42;
     axis_panel = uipanel('Parent', tab, 'Units', 'pixels', ...
         'BorderWidth', 0, 'BorderType', 'none', ...
-        'Position', [0 panelH parent_size(3) parent_size(4) - panelH]);
-    tab.UserData.Panel = axis_panel;
-    tab.SizeChangedFcn = @tabszfun;
-    drawnow();
-    
+        'Position', [0 panelH parent_size(3) parent_size(4) - panelH], ...
+        'BackgroundColor', [0 1 0]);
+
     %create axis
     ch_axis.Spacing = [40 25];
     for id = 0:1:num_sensors - 1
@@ -117,15 +116,44 @@ function testGUI
     
     %set user data object
     tab.UserData = struct('Units', '[mm/s]', 'DataIDX', 1, ...
-        'AccVelDisp', 2, 'ChannelAxis', ch_axis, 'Panel', axis_panel);
+        'AccVelDisp', 2, 'ChannelAxis', ch_axis, ...
+        'Panel', axis_panel, 'Table', config_table);
+    tab.SizeChangedFcn = @tab_szChange;
+    tab_szChange(tab);
     drawnow()
-    panel_szChange(axis_panel);
 end
 
-function tabszfun(hObject,~) 
-    panelH = 42;
-    set(hObject.UserData.Panel, ...
-        'position', [0 panelH hObject.Position(3) hObject.Position(4)-panelH]);
+function tab_szChange(hObject,~)
+    if(isfield(hObject.UserData, 'Panel'))
+        panelM = 42;
+        tabsize = hObject.Position;
+        set(hObject.UserData.Panel, ...
+            'position', [0 panelM tabsize(3) tabsize(4)-panelM]);
+        panel_szChange(hObject.UserData.Panel);
+    end
+    
+    if(isfield(hObject.UserData, 'Table'))
+        tbl = hObject.UserData.Table;
+        tblsize = tbl.Position;
+        new_size = tbl.UserData.Min;
+        while(1)
+            free_space = tabsize(3) - sum(new_size) - tblsize(1) - 15;
+            toadd = tbl.UserData.Max-new_size;
+            possible_add = toadd>0;
+            if(~sum(possible_add))
+                break;
+            end
+            min_add = sum(toadd>0);
+            times_add = min(toadd(toadd~=0));
+            times_add = min(times_add, floor(free_space/min_add));
+            if(times_add<=0)
+                break;
+            end
+            new_size = new_size + times_add.*possible_add;
+        end
+        tbl.ColumnWidth = num2cell(new_size);
+        tbl.Position(3) = sum(new_size)+2;
+    end
 end
 
 function panel_szChange(hObject, ~)
@@ -136,9 +164,9 @@ global OUTPUT
 
     plotL = ch_axis.Spacing(1);
     plotHsig = floor(0.7*parent_size(3));
-    plotHfft = parent_size(3) - 2*plotL - plotHsig -5;
+    plotHfft = parent_size(3) - 2*plotL - plotHsig - 5;
 
-    plotV = parent_size(4) - ch_axis.Spacing(2) - 5;
+    plotV = parent_size(4) - ch_axis.Spacing(2) - 15;
     plotB = 40 + rem(plotV, num_sensors);
     plotV = floor(plotV/num_sensors);
     
