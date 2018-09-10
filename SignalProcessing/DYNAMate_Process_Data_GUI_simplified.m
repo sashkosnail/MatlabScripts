@@ -14,12 +14,12 @@ global OUTPUT PathName tab_group wait_window fig
     end
 
     fig = figure(9999);
-    figszfun = @(h,~) set(h, 'position', max([0 0 1280 768], h.Position));
+    maxsize = [1200 700];
+    figszfun = @(h,~) set(h, 'position', max([0 0 maxsize], h.Position));
     set(fig, 'DeleteFcn', @figure_close_cb, 'NumberTitle', 'off', ...
         'Name', ['DYNAMate Process ' version], 'MenuBar', 'none', ...
-        'Position', [0 0 1280 768], 'SizeChangedFcn', figszfun);
+        'Position', [0 0 maxsize], 'SizeChangedFcn', figszfun);
     pause(0.00001);
-%     set(fig, 'Units', 'Normalized', 'OuterPosition', [0 0 1 1]);
     WindowAPI(fig, 'Maximize');
     
     tab_group = uitabgroup('Parent', fig, 'Units', 'normalized', ...
@@ -71,7 +71,7 @@ global OUTPUT tab_group wait_window file_progress total_progress
     next_size = [130 35];
     data_type_pd = uicontrol('Parent', tab, 'Style', 'popupmenu',...
         'Units', 'pixels', 'Position', [start_position next_size], ...
-        'FontSize', 12, 'FontWeight', 'bold', ...
+        'FontSize', 10, 'FontWeight', 'bold', ...
         'Value', 2, 'String', {'Acceleration', 'Velocity', 'Displacement'}, ...
         'Callback', @data_type_pd_callback); %#ok<NASGU>
     start_position(1) = start_position(1) + next_size(1) + 20;
@@ -80,21 +80,21 @@ global OUTPUT tab_group wait_window file_progress total_progress
     save_button = uicontrol('Parent', tab, 'Style', 'pushbutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
         'Callback', @save_data_button_callback, 'String', 'Save Data', ...
-        'FontSize', 12, 'FontWeight', 'bold', 'Tag', 'data'); %#ok<NASGU>
+        'FontSize', 10, 'FontWeight', 'bold', 'Tag', 'data'); %#ok<NASGU>
     start_position(1) = start_position(1) + next_size(1) + 5;
     
     next_size = [100 40];
     save_button = uicontrol('Parent', tab, 'Style', 'pushbutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
         'Callback', @save_image_button_callback, 'String', 'Save Image', ...
-        'FontSize', 12, 'FontWeight', 'bold', 'Tag', 'image'); %#ok<NASGU>
+        'FontSize', 10, 'FontWeight', 'bold', 'Tag', 'image'); %#ok<NASGU>
     start_position(1) = start_position(1) + next_size(1) + 5;
     
     next_size = [100 40];
     zoom_button = uicontrol('Parent', tab, 'Style', 'togglebutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
         'Callback', @zoom_button_callback, 'String', 'Zoom', ...
-        'FontSize', 12, 'FontWeight', 'bold', ...
+        'FontSize', 10, 'FontWeight', 'bold', ...
         'ToolTip', 'Hold SHIFT for Zooming out'); 
     start_position(1) = start_position(1) + next_size(1) + 5;
     
@@ -102,14 +102,14 @@ global OUTPUT tab_group wait_window file_progress total_progress
     pan_button = uicontrol('Parent', tab, 'Style', 'togglebutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
         'Callback', @pan_button_callback, 'String', 'Pan', ...
-        'FontSize', 12, 'FontWeight', 'bold'); 
+        'FontSize', 10, 'FontWeight', 'bold'); 
     start_position(1) = start_position(1) + next_size(1) + 5;
     
     next_size = [100 40];
     datatip_button = uicontrol('Parent', tab, 'Style', 'togglebutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
         'Callback', @datatip_button_callback, 'String', 'Data Tip', ...
-        'FontSize', 12, 'FontWeight', 'bold', ...
+        'FontSize', 10, 'FontWeight', 'bold', ...
         'ToolTip', 'Hold SHIFT to add more then one'); 
     start_position(1) = start_position(1) + next_size(1) + 20;
 
@@ -117,7 +117,7 @@ global OUTPUT tab_group wait_window file_progress total_progress
     exit_button = uicontrol('Parent', tab, 'Style', 'pushbutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
         'Callback', @exit_button_callback, 'String', 'Exit', ...
-        'FontSize', 12, 'FontWeight', 'bold'); %#ok<NASGU>
+        'FontSize', 10, 'FontWeight', 'bold'); %#ok<NASGU>
     start_position(1) = start_position(1) + next_size(1) + 20;
     
     zoom_button.UserData = [pan_button datatip_button];
@@ -417,7 +417,7 @@ global OUTPUT wait_window total_progress file_progress
     taper = repmat(taper, 1, numCH);
     data = (data - repmat(mean(data),N,1)).*taper;
     offset = repmat(mean(data),N,1);
-    data = data - offset;
+    data = data - offset;   
     
     switch OUTPUT.DoAll
         case 0
@@ -470,7 +470,9 @@ global OUTPUT wait_window total_progress file_progress
     end
     %Calculate Acceleration and Displacement
     Displacement = cumtrapz(t, data);
+    Displacement = Displacement - repmat(mean(Displacement),N,1);
     Acceleration = [zeros(1, numCH); diff(data/1000)/Ts];
+    Acceleration = Acceleration - repmat(mean(Acceleration),N,1);
     
     if(isvalid(wait_window))
         waitbar(total_progress + file_progress*0.7, wait_window, ...
@@ -478,7 +480,7 @@ global OUTPUT wait_window total_progress file_progress
     end
     
     %calculate Spectra
-    fftdata = abs(fft([Acceleration data Displacement])./N);
+    fftdata = abs(fft(data)./N);
     fftdata = abs(fftdata(ceil(1:N/2+1),:));
     fftdata(2:end-1,:) = 2*fftdata(2:end-1,:);
     f = Fs*(0:N/2)'/N;
@@ -486,23 +488,25 @@ global OUTPUT wait_window total_progress file_progress
         fftdata = smoothFFT(fftdata, specSmoothN, f);
     end
     %set data to output
-    
+    %time
     OUTPUT.Data{idx}.DATA.Velocity = data; %[mm/s]
     OUTPUT.Data{idx}.DATA.Acceleration = Acceleration; %[m/s^2]
     OUTPUT.Data{idx}.DATA.Displacement = Displacement; %[mm]
-    
+    %spectrum
+    OUTPUT.Data{idx}.FFT.Velocity = fftdata; %[mm/s]
+    OUTPUT.Data{idx}.FFT.Acceleration = fftdata.*(2*pi*repmat(f,1,numCH))/1000; %[m/s^2]
+    f(1) = 10^-10;
+    OUTPUT.Data{idx}.FFT.Displacement = fftdata./(2*pi*repmat(f,1,numCH)); %[mm]
+    f(1) = 0;
+    OUTPUT.Data{idx}.FFT.Frequency = f;
+    %stats
     OUTPUT.Data{idx}.VStatsTable = signal_stats([t data], ...
         OUTPUT.Sensor_configuration.ChannelNames);
     OUTPUT.Data{idx}.AStatsTable = signal_stats([t Acceleration], ...
         OUTPUT.Sensor_configuration.ChannelNames);
     OUTPUT.Data{idx}.DStatsTable = signal_stats([t Displacement], ...
         OUTPUT.Sensor_configuration.ChannelNames);
-    
-    OUTPUT.Data{idx}.FFT.Velocity = fftdata(:,1:numCH); %[mm/s]
-    OUTPUT.Data{idx}.FFT.Acceleration = fftdata(:, numCH+(1:numCH)); %[m/s^2]
-    OUTPUT.Data{idx}.FFT.Displacement = fftdata(:, 2*numCH+(1:numCH)); %[mm]
-    OUTPUT.Data{idx}.FFT.Frequency = f;
-    
+    %config
     OUTPUT.Data{idx}.ConfigTable.TaperTau = taper_tau;
     OUTPUT.Data{idx}.ConfigTable.SpectrumSmoothPower = specSmoothN;
     OUTPUT.Data{idx}.ConfigTable.CorrectionSteepness = corrSteepnes;
@@ -678,10 +682,18 @@ global OUTPUT PathName
     xlswrite([base_file '.xlsx'], ['Frequency[Hz]', ...
         cellfun(@(c) strcat(c, '[mm]'), ...
         OUTPUT.Sensor_configuration.ChannelNames, 'uni', 0)], ...
-        'FFT_Displacement', 'A1');  
+        'FFT_Displacement', 'A1'); 
+    
+    %save CONFIG
+    waitbar(0.81, wait_save, 'Saving Configuration, please wait...');
+    
+    writetable(OUTPUT.Data{idx}.ConfigTable, [base_file '.xlsx'], ...
+        'Sheet', 'Configuration', 'Range', 'A1');
+    writetable(OUTPUT.Data{idx}.Sensor_Config, [base_file '.xlsx'], ...
+        'Sheet', 'Configuration', 'Range', 'A5');
 
     %save STATS
-    waitbar(0.81, wait_save, 'Saving Signal Statistics, please wait...');
+    waitbar(0.9, wait_save, 'Saving Signal Statistics, please wait...');
     
     tbl = OUTPUT.Data{idx}.AStatsTable; r = tbl.Properties.RowNames;
     tbl = [table(r, 'VariableNames', {'Acceleration'}), tbl];
@@ -697,14 +709,6 @@ global OUTPUT PathName
     tbl = [table(r, 'VariableNames', {'Displacement'}), tbl];
     tbl.Properties.RowNames = {};
     writetable(tbl, [base_file '.xlsx'], 'Sheet', 'Configuration', 'Range', 'A33');
-    
-    %save CONFIG
-    waitbar(0.95, wait_save, 'Saving Configuration, please wait...');
-    
-    writetable(OUTPUT.Data{idx}.ConfigTable, [base_file '.xlsx'], ...
-        'Sheet', 'Configuration', 'Range', 'A1');
-    writetable(OUTPUT.Data{idx}.Sensor_Config, [base_file '.xlsx'], ...
-        'Sheet', 'Configuration', 'Range', 'A5');
 
     waitbar(1, wait_save, 'Saving Complete');
     pause(1.0);
@@ -849,7 +853,7 @@ function output_txt = datatip_format(~, event_obj)
     pos = get(event_obj,'Position');
     uY = event_obj.Target.Parent.Parent.Parent.UserData.Units;
     if(strcmp(event_obj.Target.Parent.XScale, 'log'))
-        output_txt = sprintf('%5.3e %s\n%3.2f s', ...
+        output_txt = sprintf('%5.3e %s\n%3.2f Hz', ...
             pos(2), uY(2:end-1), pos(1));
     else
         output_txt = sprintf('%5.3f %s\n%3.2f s', ...
