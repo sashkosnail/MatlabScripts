@@ -2,6 +2,7 @@
 function DYNAMate_Process_Data_GUI_simplified(varargin)
 clearvars -global OUTPUT
 global OUTPUT PathName tab_group wait_window fig
+    isTableCol=@(t, thisCol) ismember(thisCol, t.Properties.VariableNames);
     wait_window = waitbar(0,'Please wait...');
     wait_window.Children.Title.Interpreter = 'none';
     WindowAPI(wait_window, 'TopMost');
@@ -46,7 +47,9 @@ global OUTPUT PathName tab_group wait_window fig
         'ReadVariableNames', false, 'ReadRowNames', true, 'Delimiter', '\t');
     OUTPUT.cfg = array2table(table2array(cfg)', ...
         'VariableNames', cfg.Properties.RowNames);
-%     OUTPUT.cfg.targetFc = 0.5;
+    if(~isTableCol(OUTPUT.cfg, 'EnableFc'))
+        OUTPUT.cfg.targetFc = 0.5;
+    end
     
     if(read_Data()==-1)
         delete(fig)
@@ -702,23 +705,6 @@ global OUTPUT PathName
         'Sheet', 'Configuration', 'Range', 'A1');
     writetable(OUTPUT.Data{idx}.Sensor_Config, [base_file '.xlsx'], ...
         'Sheet', 'Configuration', 'Range', 'A5');
-    
-    sheetName = 'Sheet'; % EN: Sheet, DE: Tabelle, etc. (Lang. dependent)
-    % Open Excel file.
-    objExcel = actxserver('Excel.Application');
-    objExcel.Workbooks.Open(file); % Full path is necessary!
-    % Delete sheets.
-    try
-          % Throws an error if the sheets do not exist.
-          objExcel.ActiveWorkbook.Worksheets.Item(sheetName).Delete;
-          objExcel.ActiveWorkbook.Worksheets.Item([sheetName '1']).Delete;
-          objExcel.ActiveWorkbook.Worksheets.Item([sheetName '2']).Delete;
-          objExcel.ActiveWorkbook.Worksheets.Item([sheetName '3']).Delete;
-    catch
-    end
-    objExcel.Workbooks.Close;
-    Quit(objExcel);
-    delete(objExcel);
 
     waitbar(1, wait_save, 'Saving Complete');
     pause(1.0);
@@ -860,9 +846,15 @@ global fig
 end
 
 function output_txt = datatip_format(~, event_obj)
-    units = event_obj.Target.Parent.Parent.Parent.UserData.Units;
     pos = get(event_obj,'Position');
-    output_txt = sprintf('%5.3f%s\n%3.2f[s]', pos(2), units, pos(1));
+    uY = event_obj.Target.Parent.Parent.Parent.UserData.Units;
+    if(strcmp(event_obj.Target.Parent.XScale, 'log'))
+        output_txt = sprintf('%5.3e %s\n%3.2f s', ...
+            pos(2), uY(2:end-1), pos(1));
+    else
+        output_txt = sprintf('%5.3f %s\n%3.2f s', ...
+            pos(2), uY(2:end-1), pos(1));
+    end
 end
 
 function choice = choosefixDialog(targetFc)
