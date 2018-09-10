@@ -5,9 +5,9 @@ global OUTPUT PathName tab_group wait_window fig
     wait_window = waitbar(0,'Please wait...');
     wait_window.Children.Title.Interpreter = 'none';
     WindowAPI(wait_window, 'TopMost');
-    WindowAPI(wait_window, 'clip', [1 1 360 78]);
+    WindowAPI(wait_window, 'clip', [2 2 360 78]);
     
-    version = 'v1.6.0';
+    version = 'v1.6.1';
     if(isempty(PathName) || sum(PathName == 0) || ~exist(PathName, 'dir'))
         PathName = [pwd '\']; 
     end
@@ -39,7 +39,19 @@ global OUTPUT PathName tab_group wait_window fig
     PathName = PathName2;
     OUTPUT.Source_FileName = FileName;
     OUTPUT.DoAll = 0;
-    read_Data();
+    
+    %load config file
+    cfg_file = [GetExecutableFolder() '\DYNAMate.cfg'];
+    cfg = readtable(cfg_file, 'FileType', 'text', ...
+        'ReadVariableNames', false, 'ReadRowNames', true, 'Delimiter', '\t');
+    OUTPUT.cfg = array2table(table2array(cfg)', ...
+        'VariableNames', cfg.Properties.RowNames);
+%     OUTPUT.cfg.targetFc = 0.5;
+    
+    if(read_Data()==-1)
+        delete(fig)
+        return
+    end
 end
 
 function createNewTab(idx)
@@ -64,8 +76,15 @@ global OUTPUT tab_group wait_window file_progress total_progress
     next_size = [100 40];
     save_button = uicontrol('Parent', tab, 'Style', 'pushbutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
-        'Callback', @save_button_callback, 'String', 'Save Data', ...
-        'FontSize', 12, 'FontWeight', 'bold'); %#ok<NASGU>
+        'Callback', @save_data_button_callback, 'String', 'Save Data', ...
+        'FontSize', 12, 'FontWeight', 'bold', 'Tag', 'data'); %#ok<NASGU>
+    start_position(1) = start_position(1) + next_size(1) + 5;
+    
+    next_size = [100 40];
+    save_button = uicontrol('Parent', tab, 'Style', 'pushbutton', ...
+        'Units', 'pixels', 'Position', [start_position next_size], ...
+        'Callback', @save_image_button_callback, 'String', 'Save Image', ...
+        'FontSize', 12, 'FontWeight', 'bold', 'Tag', 'image'); %#ok<NASGU>
     start_position(1) = start_position(1) + next_size(1) + 5;
     
     next_size = [100 40];
@@ -156,8 +175,9 @@ global OUTPUT tab_group wait_window file_progress total_progress
 end
 
 %Read Data
-function read_Data()
+function res = read_Data()
 global PathName OUTPUT wait_window file_progress total_progress
+    res = 0;
     isTableCol=@(t, thisCol) ismember(thisCol, t.Properties.VariableNames);
     OUTPUT.Data = cell(length(OUTPUT.Source_FileName),1);
     file_progress = 1/length(OUTPUT.Source_FileName);
@@ -188,7 +208,10 @@ global PathName OUTPUT wait_window file_progress total_progress
         oldDAQ = strcmp(DAQVersion, '1.0');
         
         %Redundant read, future proof for config in TDMS
-        read_sensor_config();
+        if(read_sensor_config() == -1)
+            res = -1;
+            return;
+        end
         
         %extract data from data file
         Dtable = TDMSStruct.DATA;
@@ -216,13 +239,11 @@ global PathName OUTPUT wait_window file_progress total_progress
             SCALE = SCALES_2(scale_selected);
         end
         
-        %load config file
-        cfg = readtable('DYNAMate.cfg', 'FileType', 'text', ...
-            'ReadVariableNames', false, 'ReadRowNames', true, 'Delimiter', '\t');
-        OUTPUT.cfg = array2table(table2array(cfg)', ...
-            'VariableNames', cfg.Properties.RowNames);
-        
-        PossibleSaturationCH = find(sum(abs(DATA(:,2:end)) > OUTPUT.cfg.SatThreshold*SCALE));
+        if(SCALE)
+            PossibleSaturationCH = find(sum(abs(DATA(:,2:end)) > OUTPUT.cfg.SatThreshold*SCALE));
+        else
+            PossibleSaturationCH =[];
+        end
         OUTPUT.Data{idx}.Sensor_Config = OUTPUT.Sensor_configuration.Table;
         OUTPUT.Data{idx}.FileName = datfile;
         OUTPUT.Data{idx}.SW_version = SWVersion;
@@ -236,7 +257,6 @@ global PathName OUTPUT wait_window file_progress total_progress
         OUTPUT.Data{idx}.DATA.Acceleration = [];
         OUTPUT.Data{idx}.DATA.Displacement = [];
         OUTPUT.Data{idx}.DATA.Time = DATA(:,1);
-        OUTPUT.Data{idx}.Stats = signal_stats(DATA, OUTPUT.Sensor_configuration.ChannelNames);
         OUTPUT.Data{idx}.ScaleSTR = SCALE_str;
         OUTPUT.Data{idx}.FilterSTR = FILTERS_str(filter_selected);
         OUTPUT.Data{idx}.Scale = SCALE;
@@ -265,44 +285,84 @@ global PathName OUTPUT wait_window file_progress total_progress
     delete(wait_window);
 end
 
-function read_sensor_config()
+function res = read_sensor_config()
 global PathName OUTPUT
+    res = 0;
     isTableCol=@(t, thisCol) ismember(thisCol, t.Properties.VariableNames);
+    try
     if(exist([PathName 'sensor_configuration.txt'], 'file'))
-        ds = datastore([PathName 'sensor_configuration.txt'], ...
-            'Delimiter','\t','MultipleDelimitersAsOne',true);
-        sensor_config = read(ds);
+        try
+            sensor_config = readtable([PathName 'sensor_configuration.txt'], ...
+                'Delimiter', '\t', 'ReadRowNames', false, ...
+                'MultipleDelimsAsOne',true,'Format', '%s%s%s%s', ...
+                'TreatAsEmpty', 'NA', 'ReadVariableNames', true, ...
+                'HeaderLines', 0);
+        catch
+            sensor_config = readtable([PathName 'sensor_configuration.txt'], ...
+                'Delimiter', '\t', 'ReadRowNames', false, ...
+                'MultipleDelimsAsOne',true,'Format', '%s%s%s%s', ...
+                'TreatAsEmpty', 'NA', 'ReadVariableNames', true, ...
+                'HeaderLines', 0);
+        end
         %trim table if too large
         sensor_config = sensor_config(1:min(height(sensor_config),8),:);
-    else
-        %default config
-        sensor_config = table((1:8)', cellstr(strcat('s',num2str((1:8)'))), ...
-            cellstr(repmat('xyz',8,1)), ...
-            'VariableNames',{'Channel','Name','Components'});
-    end
-
-    active_ids = find(~strcmp(sensor_config.Name,'NA'))';
-    sensor_names = sensor_config.Name(active_ids);
-    components = sensor_config.Components(active_ids);
-    number_of_sensors = length(active_ids);
-    
-    if(isTableCol(sensor_config, 'SensorID'))
+        active_ids = find(~strcmp(sensor_config.Name,'NA'))';
         sensor_config = sensor_config(active_ids,:);
-        sensorFreq = readtable('sensor_data.csv', 'ReadRowNames',true);
-        sensorFreq = sensorFreq(cellstr(sensor_config.SensorID),:);
-        sensorFreq.Properties.RowNames = {};
+        number_of_sensors = length(active_ids);
+        
+        if(isTableCol(sensor_config, 'SensorID'))
+            sens_file = [GetExecutableFolder() '\sensor_data.csv'];
+            sensorFreqTable = readtable(sens_file, 'ReadRowNames',true);
+            sensorFreq = array2table(4.5*ones(length(sensor_config.SensorID),3));
+            sensorFreq.Properties.VariableNames = sensorFreqTable.Properties.VariableNames;
+            for sid = 1:1:length(sensor_config.SensorID)
+                if(strcmp(sensor_config.SensorID(sid), 'NA'))
+                    continue;
+                else
+                    sensorFreq(sid,:) = sensorFreqTable(...
+                        cellstr(sensor_config.SensorID(sid)),:);
+                end
+            end
+        else
+            sensor_config = [sensor_config(active_ids,:) ...
+                table(repmat({'NA'}, number_of_sensors,1), 'VariableNames', {'SensorID'})];
+            sensorFreq = array2table(4.5*ones(number_of_sensors,3), ...
+                'VariableNames', {'xFc', 'yFc', 'zFc'});
+        end
     else
-        sensor_config = [sensor_config(active_ids,:) ...
-            table(repmat('NA', number_of_sensors,1), 'VariableNames', {'SensorID'})];
-        sensorFreq = array2table(4.5*ones(number_of_sensors,3), ...
-            'VariableNames', {'xFc', 'yFc', 'zFc'});
+        ME = MException('DYNAMate:config_not_found', ...
+            'No Sensor Config File Found');
+        throw(ME);
     end
-
+    
+    catch ME
+        if(~strcmp('Continue', questdlg({'Error Loading Sensor Configuration', ...
+                ME.message, 'Do you want ot continue with defualt config or exit'}, ...
+                'Error Loading', 'Exit', 'Continue', 'Exit')))
+            res = -1;
+            return;
+        end
+        sensor_config = table((1:8)', cellstr(strcat('s',num2str((1:8)'))), ...
+            cellstr(repmat('xyz',8,1)), repmat({'NA'}, 8,1), ...
+            'VariableNames',{'Channel', 'Name', 'Components', 'SensorID'});
+        sensorFreq = array2table(4.5*ones(8,3), ...
+                'VariableNames', {'xFc', 'yFc', 'zFc'});
+        number_of_sensors = 8;
+        active_ids = 1:1:8;
+    end
+    
+    sensor_names = sensor_config.Name;
+    components = sensor_config.Components;
+    
     %figure out the order of channels and components
     data_channels = zeros(1, 3*number_of_sensors);
     for sensor = 1:1:number_of_sensors
         chan = active_ids(sensor);
-        comps = cell2mat(components(sensor));
+        if(strcmp(components(sensor),'NA'))
+            comps = 'xyz';
+        else
+            comps = cell2mat(components(sensor));
+        end
         %column numbers for the given channel
         cn = (chan*3-2):(chan*3);
         %reorder based on comps
@@ -419,12 +479,21 @@ global OUTPUT wait_window total_progress file_progress
     fftdata = abs(fftdata(ceil(1:N/2+1),:));
     fftdata(2:end-1,:) = 2*fftdata(2:end-1,:);
     f = Fs*(0:N/2)'/N;
-    fftdata = smoothFFT(fftdata, specSmoothN, f);
+    if(specSmoothN)
+        fftdata = smoothFFT(fftdata, specSmoothN, f);
+    end
     %set data to output
     
     OUTPUT.Data{idx}.DATA.Velocity = data; %[mm/s]
     OUTPUT.Data{idx}.DATA.Acceleration = Acceleration; %[m/s^2]
     OUTPUT.Data{idx}.DATA.Displacement = Displacement; %[mm]
+    
+    OUTPUT.Data{idx}.VStatsTable = signal_stats([t data], ...
+        OUTPUT.Sensor_configuration.ChannelNames);
+    OUTPUT.Data{idx}.AStatsTable = signal_stats([t Acceleration], ...
+        OUTPUT.Sensor_configuration.ChannelNames);
+    OUTPUT.Data{idx}.DStatsTable = signal_stats([t Displacement], ...
+        OUTPUT.Sensor_configuration.ChannelNames);
     
     OUTPUT.Data{idx}.FFT.Velocity = fftdata(:,1:numCH); %[mm/s]
     OUTPUT.Data{idx}.FFT.Acceleration = fftdata(:, numCH+(1:numCH)); %[m/s^2]
@@ -465,7 +534,8 @@ global OUTPUT fig
         %Spectrum Plot  
         ax = tab.UserData.ChannelAxis.SpectrumAxis(idx+1);
         cla(ax);
-        loglog(f,fftdata(:,data_id), 'LineWidth', 1, 'Parent', ax);
+        h = loglog(f,fftdata(:,data_id), 'LineWidth', 1, 'Parent', ax);
+        set(h, {'color'}, {'r','b','k'}');
         set(ax, 'Color', 'w', 'GridColor', 'k', ...
             'XAxisLocation', 'bottom', 'NextPlot', 'add', ...
             'XGrid', 'on', 'YGrid', 'on', 'GridLineStyle', '-', ...
@@ -484,7 +554,8 @@ global OUTPUT fig
         %Signal Plot
         ax = tab.UserData.ChannelAxis.SignalAxis(idx+1);
         cla(ax);
-        plot(t,data(:,data_id), 'LineWidth', 1, 'Parent', ax);
+        h = plot(t,data(:,data_id), 'LineWidth', 1, 'Parent', ax);
+        set(h, {'color'}, {'r','b','k'}');
         set(ax, 'Color', 'w', 'GridColor', 'k', 'XLim', [t(1) t(end)], ...
             'XAxisLocation', 'bottom', 'NextPlot', 'add', ...
         'XGrid', 'on', 'YGrid', 'on', 'GridColor', 'k', ...
@@ -518,8 +589,8 @@ global OUTPUT fig
 end
 
 %UI CALLBACKS
-function save_button_callback(hObject, ~)
-global OUTPUT PathName fig
+function save_data_button_callback(hObject, ~)
+global OUTPUT PathName
     idx = hObject.Parent.UserData.DataIDX;
     source_file = OUTPUT.Data{idx}.FileName(1:end-5);
     file = [PathName source_file];
@@ -542,20 +613,9 @@ global OUTPUT PathName fig
     
     base_file = [PathName FileName(1:dot_index)];
     
-    WindowAPI(fig, 'maximize');
-    export_fig([base_file '.png'], '-c[25 0 45 0]', fig);
-    wait_save = waitbar(0.0, 'Saving Configuration, please wait...');
+    wait_save = waitbar(0.0, 'Saving Acceleration Data, please wait...');
     WindowAPI(wait_save, 'TopMost');
     WindowAPI(wait_save, 'clip', [1 1 360 70]);
-    
-    %save CONFIG
-    writetable(OUTPUT.Data{idx}.ConfigTable, [base_file '.xlsx']);
-    writetable(OUTPUT.Data{idx}.Sensor_Config, [base_file '.xlsx'], ...
-        'Sheet', 'Sheet1', 'Range', 'A5');
-    writetable(OUTPUT.Data{idx}.Stats, [base_file '.xlsx'], ...
-        'Sheet', 'Sheet1', 'Range', 'A15', 'WriteRowNames', true);
-    
-    waitbar(0.1429, wait_save, 'Saving Acceleration Data, please wait...');
     
     %save DATA 
     tbl = [OUTPUT.Data{idx}.DATA.Time OUTPUT.Data{idx}.DATA.Acceleration];
@@ -566,7 +626,7 @@ global OUTPUT PathName fig
         OUTPUT.Sensor_configuration.ChannelNames, 'uni', 0)], ...
         'Acceleration', 'A1');
     
-    waitbar(0.2857, wait_save, 'Saving Velocity Data, please wait...');
+    waitbar(0.1429, wait_save, 'Saving Velocity Data, please wait...');
     
     tbl = [OUTPUT.Data{idx}.DATA.Time OUTPUT.Data{idx}.DATA.Velocity];
     tbl = array2table(tbl);
@@ -576,7 +636,7 @@ global OUTPUT PathName fig
         OUTPUT.Sensor_configuration.ChannelNames, 'uni', 0)], ...
         'Velocity', 'A1');
     
-    waitbar(0.4286, wait_save, 'Saving Displacement Data, please wait...');
+    waitbar(0.2857, wait_save, 'Saving Displacement Data, please wait...');
     
     tbl = [OUTPUT.Data{idx}.DATA.Time OUTPUT.Data{idx}.DATA.Displacement];
     tbl = array2table(tbl);
@@ -587,7 +647,7 @@ global OUTPUT PathName fig
         'Displacement', 'A1');
     
     %save FFT
-    waitbar(0.5714, wait_save, 'Saving Acceleration FFT, please wait...');
+    waitbar(0.4286, wait_save, 'Saving Acceleration FFT, please wait...');
     
     tbl = [OUTPUT.Data{idx}.FFT.Frequency OUTPUT.Data{idx}.FFT.Acceleration];
     tbl = array2table(tbl);
@@ -597,7 +657,7 @@ global OUTPUT PathName fig
         OUTPUT.Sensor_configuration.ChannelNames, 'uni', 0)], ...
         'FFT_Acceleration', 'A1');
     
-    waitbar(0.7143, wait_save, 'Saving Velocity FFT, please wait...');
+    waitbar(0.5714, wait_save, 'Saving Velocity FFT, please wait...');
     
     tbl = [OUTPUT.Data{idx}.FFT.Frequency OUTPUT.Data{idx}.FFT.Velocity];
     tbl = array2table(tbl);
@@ -607,7 +667,7 @@ global OUTPUT PathName fig
         OUTPUT.Sensor_configuration.ChannelNames, 'uni', 0)], ...
         'FFT_Velocity', 'A1');
     
-    waitbar(0.8571, wait_save, 'Saving Displacement FFT, please wait...');
+    waitbar(0.7143, wait_save, 'Saving Displacement FFT, please wait...');
     
     tbl = [OUTPUT.Data{idx}.FFT.Frequency OUTPUT.Data{idx}.FFT.Displacement];
     tbl = array2table(tbl);
@@ -617,9 +677,89 @@ global OUTPUT PathName fig
         OUTPUT.Sensor_configuration.ChannelNames, 'uni', 0)], ...
         'FFT_Displacement', 'A1');  
 
+    %save STATS
+    waitbar(0.81, wait_save, 'Saving Signal Statistics, please wait...');
+    
+    tbl = OUTPUT.Data{idx}.AStatsTable; r = tbl.Properties.RowNames;
+    tbl = [table(r, 'VariableNames', {'Acceleration'}), tbl];
+    tbl.Properties.RowNames = {}; 
+    writetable(tbl, [base_file '.xlsx'], 'Sheet', 'Configuration', 'Range', 'A15');
+    
+    tbl = OUTPUT.Data{idx}.VStatsTable; r = tbl.Properties.RowNames;
+    tbl = [table(r, 'VariableNames', {'Velocity'}), tbl];
+    tbl.Properties.RowNames = {};
+    writetable(tbl, [base_file '.xlsx'], 'Sheet', 'Configuration', 'Range', 'A24');
+    
+    tbl = OUTPUT.Data{idx}.DStatsTable; r = tbl.Properties.RowNames;
+    tbl = [table(r, 'VariableNames', {'Displacement'}), tbl];
+    tbl.Properties.RowNames = {};
+    writetable(tbl, [base_file '.xlsx'], 'Sheet', 'Configuration', 'Range', 'A33');
+    
+    %save CONFIG
+    waitbar(0.95, wait_save, 'Saving Configuration, please wait...');
+    
+    writetable(OUTPUT.Data{idx}.ConfigTable, [base_file '.xlsx'], ...
+        'Sheet', 'Configuration', 'Range', 'A1');
+    writetable(OUTPUT.Data{idx}.Sensor_Config, [base_file '.xlsx'], ...
+        'Sheet', 'Configuration', 'Range', 'A5');
+    
+    sheetName = 'Sheet'; % EN: Sheet, DE: Tabelle, etc. (Lang. dependent)
+    % Open Excel file.
+    objExcel = actxserver('Excel.Application');
+    objExcel.Workbooks.Open(file); % Full path is necessary!
+    % Delete sheets.
+    try
+          % Throws an error if the sheets do not exist.
+          objExcel.ActiveWorkbook.Worksheets.Item(sheetName).Delete;
+          objExcel.ActiveWorkbook.Worksheets.Item([sheetName '1']).Delete;
+          objExcel.ActiveWorkbook.Worksheets.Item([sheetName '2']).Delete;
+          objExcel.ActiveWorkbook.Worksheets.Item([sheetName '3']).Delete;
+    catch
+    end
+    objExcel.Workbooks.Close;
+    Quit(objExcel);
+    delete(objExcel);
+
     waitbar(1, wait_save, 'Saving Complete');
     pause(1.0);
     delete(wait_save);
+end
+
+function save_image_button_callback(hObject, ~)
+global OUTPUT PathName fig
+    idx = hObject.Parent.UserData.DataIDX;
+    source_file = OUTPUT.Data{idx}.FileName(1:end-5);
+    file = [PathName source_file];
+    
+    switch hObject.Parent.UserData.AccVelDisp
+        case 1
+            TYPE = '_Acceleration';
+        case 3
+            TYPE = '_Displacement';
+        otherwise
+            TYPE = '_Velocity';
+    end
+    
+    [FileName, PathName2, ~] = uiputfile('*.png', 'Save Image', [file TYPE '.png']);
+    if(~iscell(FileName))
+        FileName = {FileName}; end
+    if(FileName{1} == 0)
+        return; 
+    end
+    PathName = PathName2;
+    if(iscell(FileName))
+        FileName = FileName{1}; end
+    dot_index = strfind(FileName,'.');
+    if(isempty(dot_index))
+        dot_index = length(FileName);
+    else
+        dot_index = dot_index(end)-1;
+    end
+    
+    base_file = [PathName FileName(1:dot_index)];
+    
+    WindowAPI(fig, 'maximize');
+    export_fig([base_file '.png'], '-c[25 0 45 0]', fig);
 end
 
 function exit_button_callback(~, ~)
@@ -726,10 +866,12 @@ function output_txt = datatip_format(~, event_obj)
 end
 
 function choice = choosefixDialog(targetFc)
+    choice = 'No';
     d = dialog('Units', 'normalized', 'Position', [0.4 0.7 0.1 0.1], ...
         'Name', 'Sensor Correction');
     d.Units = 'pixels';
     d.Position(3:4) = [375 100];
+    WindowAPI(d, 'Button', 'off');
     
     uicontrol('Parent', d, 'Style', 'text', 'Position', [20 50 335 40], ...
         'String', ['Correct sensor reponse to ' num2str(targetFc) 'Hz?'], ...
@@ -756,4 +898,25 @@ function choice = choosefixDialog(targetFc)
         choice = button.String;
         delete(button.Parent);
     end
+end
+
+% Returns the folder where the compiled executable actually resides.
+function [executableFolder] = GetExecutableFolder() 
+	try
+		if isdeployed 
+			% User is running an executable in standalone mode. 
+			[~, result] = system('set PATH');
+			executableFolder = char(regexpi(result, 'Path=(.*?);', 'tokens', 'once'));
+		else
+			% User is running an m-file from the MATLAB integrated development environment (regular MATLAB).
+			executableFolder = mfilename('fullpath');
+            tmp = strfind(executableFolder, '\');
+            executableFolder = executableFolder(1:tmp(end)-1);
+		end 
+	catch ME
+		errorMessage = sprintf('Error in function %s() at line %d.\n\nError Message:\n%s', ...
+			ME.stack(1).name, ME.stack(1).line, ME.message);
+		uiwait(warndlg(errorMessage));
+	end
+	return;
 end
