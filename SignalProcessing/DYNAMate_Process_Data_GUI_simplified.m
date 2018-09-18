@@ -47,11 +47,11 @@ global OUTPUT PathName tab_group wait_window fig
 
     %create main figure
     fig = figure(9999);
-    maxsize = [1200 700];
-    figszfun = @(h,~) set(h, 'position', max([0 0 maxsize], h.Position));
+    minsize = [1200 700];
+    figszfun = @(h,~) set(h, 'position', max([0 0 minsize], h.Position));
     set(fig, 'DeleteFcn', @figure_close_cb, 'NumberTitle', 'off', ...
         'Name', ['DYNAMate Process ' version], 'MenuBar', 'none', ...
-        'Position', [0 0 maxsize], 'SizeChangedFcn', figszfun);
+        'Position', [0 0 minsize], 'SizeChangedFcn', figszfun);
     pause(0.00001);
     
     tab_group = uitabgroup('Parent', fig, 'Units', 'normalized', ...
@@ -106,7 +106,7 @@ global OUTPUT tab_group wait_window file_progress total_progress
     %create parameters
 
     %create UI controls
-    start_position = [20 2];
+    start_position = [40 2];
 
     next_size = [100 35];
     data_type_pd = uicontrol('Parent', tab, 'Style', 'popupmenu',...
@@ -114,68 +114,54 @@ global OUTPUT tab_group wait_window file_progress total_progress
         'FontSize', 8, 'FontWeight', 'bold', ...
         'Value', 2, 'String', {'Acceleration', 'Velocity', 'Displacement'}, ...
         'Callback', @data_type_pd_callback); %#ok<NASGU>
-    start_position(1) = start_position(1) + next_size(1) + 10;
+    start_position(1) = start_position(1) + next_size(1) + 50;
 
-    next_size = [80 40];
+    next_size = [100 40];
     save_button = uicontrol('Parent', tab, 'Style', 'pushbutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
         'Callback', @save_data_button_callback, 'String', 'Save Data', ...
         'FontSize', 10, 'FontWeight', 'bold', 'Tag', 'data'); %#ok<NASGU>
-    start_position(1) = start_position(1) + next_size(1) + 5;
+    start_position(1) = start_position(1) + next_size(1) + 10;
 
-    next_size = [80 40];
+    next_size = [100 40];
     save_button = uicontrol('Parent', tab, 'Style', 'pushbutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
         'Callback', @save_image_button_callback, 'String', 'Save Image', ...
         'FontSize', 10, 'FontWeight', 'bold', 'Tag', 'image'); %#ok<NASGU>
-    start_position(1) = start_position(1) + next_size(1) + 5;
+    start_position(1) = start_position(1) + next_size(1) + 50;
 
-    next_size = [80 40];
+    next_size = [100 40];
     zoom_button = uicontrol('Parent', tab, 'Style', 'togglebutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
         'Callback', @zoom_button_callback, 'String', 'Zoom', ...
         'FontSize', 10, 'FontWeight', 'bold', ...
         'ToolTip', 'Hold SHIFT for Zooming out'); 
-    start_position(1) = start_position(1) + next_size(1) + 5;
+    start_position(1) = start_position(1) + next_size(1) + 10;
 
-    next_size = [80 40];
+    next_size = [100 40];
     pan_button = uicontrol('Parent', tab, 'Style', 'togglebutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
         'Callback', @pan_button_callback, 'String', 'Pan', ...
         'FontSize', 10, 'FontWeight', 'bold'); 
-    start_position(1) = start_position(1) + next_size(1) + 5;
+    start_position(1) = start_position(1) + next_size(1) + 10;
 
-    next_size = [80 40];
+    next_size = [100 40];
     datatip_button = uicontrol('Parent', tab, 'Style', 'togglebutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
-        'Callback', @datatip_button_callback, 'String', 'Data Tip', ...
+        'Callback', @datatip_button_callback, 'String', 'Data Cursor', ...
         'FontSize', 10, 'FontWeight', 'bold', ...
         'ToolTip', 'Hold SHIFT to add more then one'); 
-    start_position(1) = start_position(1) + next_size(1) + 10;
+    start_position(1) = start_position(1) + next_size(1) + 50;
 
-    next_size = [80 40];
-    exit_button = uicontrol('Parent', tab, 'Style', 'pushbutton', ...
+    next_size = [150 40];
+    info_button = uicontrol('Parent', tab, 'Style', 'pushbutton', ...
         'Units', 'pixels', 'Position', [start_position next_size], ...
-        'Callback', @exit_button_callback, 'String', 'Exit', ...
+        'Callback', @info_button_callback, 'String', 'Information Table', ...
         'FontSize', 10, 'FontWeight', 'bold'); %#ok<NASGU>
-    start_position(1) = start_position(1) + next_size(1) + 10;
 
     zoom_button.UserData = [pan_button datatip_button];
     pan_button.UserData = [zoom_button datatip_button];
     datatip_button.UserData = [pan_button zoom_button];
-
-    widths.Min = [50, 50, 30, 60, 40, 20, 40, 40, 40, 40, 40, 40, 40];
-    widths.Max = [80, 75, 30, 70, 60, 60, 45, 45, 65, 125, 65, 140, 125];
-    config_table = uitable('Parent', tab, 'UserData', widths);
-    config_table.Data = table2cell(OUTPUT.Data{idx}.ConfigTable(:,2:end));
-    config_table.ColumnName = ...
-        OUTPUT.Data{idx}.ConfigTable.Properties.VariableNames(2:end);
-    column_widths = config_table.UserData.Min;
-    config_table.ColumnWidth = num2cell(column_widths);
-    next_size = [sum(column_widths)+2 40];
-    config_table.Units = 'pixels';
-    config_table.Position = [start_position next_size];
-    config_table.RowName = [];
     
     %Plot Panel
     parent_size = tab.Position;
@@ -201,7 +187,7 @@ global OUTPUT tab_group wait_window file_progress total_progress
     %set user data object
     tab.UserData = struct('Units', '[mm/s]', 'DataIDX', idx, ...
         'AccVelDisp', 2, 'ChannelAxis', ch_axis, ...
-        'Panel', axis_panel, 'Table', config_table);
+        'Panel', axis_panel);
     tab.SizeChangedFcn = @tab_szChange;
     tab_szChange(tab);
     drawnow()
@@ -797,14 +783,66 @@ global OUTPUT PathName fig
     export_fig([base_file '.png'], '-c[25 0 45 0]', fig);
 end
 
-function exit_button_callback(~, ~)
-global fig
-    answer = questdlg('Do you want to Exit?', ...
-                'Quit', 'Yes', 'No', 'Yes');
-    if(strcmp(answer,'Yes'))
-        delete(fig)
-        clear global
-        close all force
+function info_button_callback(hObject, ~)
+global OUTPUT info_dialog
+    if(ishandle(info_dialog))
+        delete(info_dialog);
+    end
+    idx = hObject.Parent.UserData.DataIDX;
+    
+    widths.Min = [50, 50, 30, 60, 40, 20, 40, 50, 40, 40, 40, 40, 40];
+    widths.Max = [80, 75, 30, 70, 60, 60, 45, 50, 65, 125, 65, 140, 125];
+    
+    info_dialog = dialog('Units', 'normalized', 'Position', [0.4 0.7 0.1 0.1], ...
+        'Name', 'Processing and Aquisition Information', 'Resize', 'on', ... 
+        'WindowStyle', 'normal', 'SizeChangedFcn', @size_changed);
+    info_dialog.Units = 'pixels';
+    info_dialog.Position(3:4) = [sum(widths.Min) 40];
+    WindowAPI(info_dialog, 'TopMost');
+    WindowAPI(info_dialog, 'maximize');
+    WindowAPI(info_dialog, 'maximize', false);
+    
+    config_table = uitable('Parent', info_dialog, 'UserData', widths);
+    config_table.Data = table2cell(OUTPUT.Data{idx}.ConfigTable(:,2:end));
+    config_table.ColumnName = ...
+        OUTPUT.Data{idx}.ConfigTable.Properties.VariableNames(2:end);
+    column_widths = config_table.UserData.Min;
+    config_table.ColumnWidth = num2cell(column_widths);
+    config_table.Units = 'normalized';
+    config_table.Position = [0 0 1 1];
+    config_table.RowName = [];
+    
+    size_changed(info_dialog);
+    
+    function size_changed(hObject, ~)
+        if(isempty(hObject.Children))
+            return
+        end
+        tbl = hObject.Children(1);
+        tblsize = tbl.Position;
+        tabsize = hObject.Position;
+        new_size = tbl.UserData.Min;
+        minsize = [sum(tbl.UserData.Min) 40];
+        maxsize = [sum(tbl.UserData.Max) 40];
+        hObject.Position(3:4) = min(maxsize, hObject.Position(3:4));
+        hObject.Position(3:4) = max(minsize, hObject.Position(3:4));
+        while(1)
+            free_space = tabsize(3) - sum(new_size) - tblsize(1);
+            toadd = tbl.UserData.Max-new_size;
+            possible_add = toadd>0;
+            if(~sum(possible_add))
+                break;
+            end
+            min_add = sum(toadd>0);
+            times_add = min(toadd(toadd~=0));
+            times_add = min(times_add, floor(free_space/min_add));
+            if(times_add<=0)
+                break;
+            end
+            new_size = new_size + times_add.*possible_add;
+        end
+        tbl.ColumnWidth = num2cell(new_size);
+        tbl.Position(3) = sum(new_size)+2;
     end
 end
 
@@ -839,29 +877,6 @@ function tab_szChange(hObject,~)
         set(hObject.UserData.Panel, ...
             'position', [0 panelM tabsize(3) tabsize(4)-panelM]);
         panel_szChange(hObject.UserData.Panel);
-    end
-    
-    if(isfield(hObject.UserData, 'Table'))
-        tbl = hObject.UserData.Table;
-        tblsize = tbl.Position;
-        new_size = tbl.UserData.Min;
-        while(1)
-            free_space = tabsize(3) - sum(new_size) - tblsize(1) - 15;
-            toadd = tbl.UserData.Max-new_size;
-            possible_add = toadd>0;
-            if(~sum(possible_add))
-                break;
-            end
-            min_add = sum(toadd>0);
-            times_add = min(toadd(toadd~=0));
-            times_add = min(times_add, floor(free_space/min_add));
-            if(times_add<=0)
-                break;
-            end
-            new_size = new_size + times_add.*possible_add;
-        end
-        tbl.ColumnWidth = num2cell(new_size);
-        tbl.Position(3) = sum(new_size)+2;
     end
 end
 
