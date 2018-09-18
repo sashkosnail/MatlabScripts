@@ -5,14 +5,47 @@ global OUTPUT PathName tab_group wait_window fig
     isTableCol=@(t, thisCol) ismember(thisCol, t.Properties.VariableNames);
     wait_window = waitbar(0,'Please wait...');
     wait_window.Children.Title.Interpreter = 'none';
-    WindowAPI(wait_window, 'TopMost');
-    WindowAPI(wait_window, 'clip', [2 2 360 78]);
     
-    version = 'v1.6.1';
-    if(isempty(PathName) || sum(PathName == 0) || ~exist(PathName, 'dir'))
+    version = 'v1.70';
+    
+    %load config file
+    cfg_file = [GetExecutableFolder() '\DYNAMate.cfg'];
+    cfg = readtable(cfg_file, 'FileType', 'text', ...
+        'ReadVariableNames', false, 'ReadRowNames', true, 'Delimiter', '\t');
+    tmp = array2table(table2array(cfg)', ...
+        'VariableNames', cfg.Properties.RowNames);
+    tmp2 = str2double(table2array(tmp(:,:)));
+    OUTPUT.cfg = [array2table(tmp2(~isnan(tmp2)), ...
+        'VariableNames', tmp.Properties.VariableNames(~isnan(tmp2))) ...
+        tmp(:,isnan(tmp2))];
+    if(~isTableCol(OUTPUT.cfg, 'EnableFc'))
+        OUTPUT.cfg.targetFc = 0.5;
+    end
+    PathName = char(OUTPUT.cfg.PathName);
+    
+    if(length(PathName) <= 1 || ~exist(PathName, 'dir'))
         PathName = [pwd '\']; 
     end
+    
+    figure(wait_window)
+    waitbar(0.05, wait_window, 'Select Input Files');
+    
+    %get input files
+    [FileName, PathName, ~] = uigetfile([PathName, '*.tdms'], ...
+        'Pick File','MultiSelect','on');
+    
+    if(~iscell(FileName))
+        FileName = {FileName}; end
+    if(FileName{1} == 0)
+        delete(wait_window)
+        delete(fig)
+        return; 
+    end
+    OUTPUT.cfg.PathName = PathName;
+    OUTPUT.Source_FileName = FileName;
+    OUTPUT.DoAll = 0;
 
+    %create main figure
     fig = figure(9999);
     maxsize = [1200 700];
     figszfun = @(h,~) set(h, 'position', max([0 0 maxsize], h.Position));
@@ -24,37 +57,44 @@ global OUTPUT PathName tab_group wait_window fig
     tab_group = uitabgroup('Parent', fig, 'Units', 'normalized', ...
         'Position', [0 0, 1, 1]);
     
-    figure(wait_window)
-    waitbar(0.05, wait_window, 'Select Input Files');
-    [FileName, PathName2, ~] = uigetfile([PathName, '*.tdms'], ...
-        'Pick File','MultiSelect','on');
+    dcm = datacursormode(fig);
+    cm = get(dcm,'UIContextMenu');
     
-    if(~iscell(FileName))
-        FileName = {FileName}; end
-    if(FileName{1} == 0)
-        delete(wait_window)
-        delete(fig)
-        return; 
-    end
-    PathName = PathName2;
-    OUTPUT.Source_FileName = FileName;
-    OUTPUT.DoAll = 0;
-    
-    %load config file
-    cfg_file = [GetExecutableFolder() '\DYNAMate.cfg'];
-    cfg = readtable(cfg_file, 'FileType', 'text', ...
-        'ReadVariableNames', false, 'ReadRowNames', true, 'Delimiter', '\t');
-    OUTPUT.cfg = array2table(table2array(cfg)', ...
-        'VariableNames', cfg.Properties.RowNames);
-    if(~isTableCol(OUTPUT.cfg, 'EnableFc'))
-        OUTPUT.cfg.targetFc = 0.5;
+    try
+        dcm.removeAllDataCursors()
+        set(findobj(cm.Children, 'Tag', 'DataCursorExport'), ...
+            'Callback', @export_data_tips, 'Label', 'Export to File');
+        
+        set(findobj(cm.Children, 'Tag', 'DataCursorNewDatatip'), ...
+            'Separator', 'off');
+        
+        set(findobj(cm.Children, 'Tag', 'DataCursorDisplayStyle'), ...
+            'Visible', 'off');
+        set(findobj(cm.Children, 'Tag', 'DataCursorSelectionStyle'), ...
+            'Visible', 'off');
+        
+        set(findobj(cm.Children, 'Tag', 'DataCursorSelectText'), ...
+            'Visible', 'off');
+        set(findobj(cm.Children, 'Tag', 'DataCursorEditText'), ...
+            'Visible', 'off', 'Separator', 'off');
+    catch
     end
     
+    WindowAPI(fig, 'Maximize');
+    WindowAPI(wait_window, 'TopMost');
+    WindowAPI(wait_window, 'clip', [2 2 360 78]);
+    
+    %save config file
+    writetable(cell2table(table2cell(OUTPUT.cfg)', ...
+        'RowNames', OUTPUT.cfg.Properties.VariableNames), cfg_file, ...
+        'FileType', 'text', 'Delimiter', '\t', ...
+        'WriteVariableNames', false, 'WriteRowNames', true);
+    
+    %try to read data exit if bad
     if(read_Data()==-1)
         delete(fig)
         return
     end
-    WindowAPI(fig, 'Maximize');
 end
 
 function createNewTab(idx)
@@ -339,7 +379,7 @@ global PathName OUTPUT
     catch ME
         if(~strcmp('Continue', questdlg({'Error Loading Sensor Configuration', ...
                 ME.message, 'Do you want ot continue with defualt config or exit'}, ...
-                'Error Loading', 'Exit', 'Continue', 'Exit')))
+                'Error Loading', 'Exit', 'Continue', 'Continue')))
             res = -1;
             return;
         end
@@ -536,11 +576,18 @@ global OUTPUT fig
         max(max(abs(fftdata(2:end,:))))];
     for idx = 0:1:num_sensors - 1
         data_id = ((num_sensors -1 - idx)*3 + 1):((num_sensors - idx)*3);
+        sensor_name = OUTPUT.Sensor_configuration.SensorNames(num_sensors - idx);
+        sensor_names = cellfun(@(c) strcat(c, {'_X';'_Y';'_Z'}), ...
+        sensor_name, 'uni', 0);
+        sensor_names = sensor_names{:};
+        sensor_names_FFT = cellfun(@(c) strcat(c, {'_X_FFT';'_Y_FFT';'_Z_FFT'}), ...
+        sensor_name, 'uni', 0);
+        sensor_names_FFT = sensor_names_FFT{:};
         %Spectrum Plot  
         ax = tab.UserData.ChannelAxis.SpectrumAxis(idx+1);
         cla(ax);
         h = loglog(f,fftdata(:,data_id), 'LineWidth', 1, 'Parent', ax);
-        set(h, {'color'}, {'r','b','k'}');
+        set(h, {'color'}, {'r','b','k'}', {'Tag'}, sensor_names_FFT);
         set(ax, 'Color', 'w', 'GridColor', 'k', ...
             'XAxisLocation', 'bottom', 'NextPlot', 'add', ...
             'XGrid', 'on', 'YGrid', 'on', 'GridLineStyle', '-', ...
@@ -560,7 +607,7 @@ global OUTPUT fig
         ax = tab.UserData.ChannelAxis.SignalAxis(idx+1);
         cla(ax);
         h = plot(t,data(:,data_id), 'LineWidth', 1, 'Parent', ax);
-        set(h, {'color'}, {'r','b','k'}');
+        set(h, {'color'}, {'r','b','k'}', {'Tag'}, sensor_names);
         set(ax, 'Color', 'w', 'GridColor', 'k', 'XLim', [t(1) t(end)], ...
             'XAxisLocation', 'bottom', 'NextPlot', 'add', ...
         'XGrid', 'on', 'YGrid', 'on', 'GridColor', 'k', ...
@@ -575,7 +622,7 @@ global OUTPUT fig
             ax.XAxis.TickLabels = [];
         end
         text(t(2), max(ax.YLim), sprintf(' %s %s', tab.UserData.Units, ...
-            OUTPUT.Sensor_configuration.SensorNames{num_sensors - idx}), ...
+            sensor_name{:}), ...
             'Color', 'k', 'BackgroundColor', 'none', 'Parent', ax, ...
             'VerticalAlignment', 'top', 'Margin', 0.0001, ...
             'FontSize', 18, 'FontWeight', 'bold');
@@ -777,8 +824,11 @@ end
 
 function figure_close_cb(~, ~)
 global wait_window
-    if(ishandle(wait_window) || isvalid(wait_window))
-        delete(wait_window)
+    try
+        if(ishandle(wait_window) || isvalid(wait_window))
+            delete(wait_window)
+        end
+    catch
     end
 end
 
@@ -817,6 +867,9 @@ end
 
 function panel_szChange(hObject, ~)
 global OUTPUT
+    if(~isfield(OUTPUT, 'Data'))
+        return;
+    end
     num_sensors = OUTPUT.Data{1}.Nsensors;
     parent_size = hObject.Position;
     ch_axis = hObject.UserData;
@@ -881,12 +934,13 @@ end
 function output_txt = datatip_format(~, event_obj)
     pos = get(event_obj,'Position');
     uY = event_obj.Target.Parent.Parent.Parent.UserData.Units;
+    name = event_obj.Target.Tag;
     if(strcmp(event_obj.Target.Parent.XScale, 'log'))
-        output_txt = sprintf('%5.3e %s\n%3.2f Hz', ...
-            pos(2), uY(2:end-1), pos(1));
+        output_txt = sprintf('%s\n%5.3e %s\n%3.2f Hz', ...
+            name, pos(2), uY(2:end-1), pos(1));
     else
-        output_txt = sprintf('%5.3f %s\n%3.2f s', ...
-            pos(2), uY(2:end-1), pos(1));
+        output_txt = sprintf('%s\n%5.3f %s\n%3.2f s', ...
+            name, pos(2), uY(2:end-1), pos(1));
     end
 end
 
@@ -918,6 +972,7 @@ function choice = choosefixDialog(targetFc)
     next_size = [80 30];
     uicontrol('Parent', d, 'Position', [start_position next_size], ...
         'Callback', @makechoice, 'Tag', 'No', 'String', 'No');
+    WindowAPI(d, 'TopMost');
     uiwait(d);
     function makechoice(button, ~)
         choice = button.String;
@@ -925,6 +980,68 @@ function choice = choosefixDialog(targetFc)
     end
 end
 
+function export_data_tips(~, ~)
+global PathName
+    file = [PathName 'data_cursors.csv'];
+    
+    [FileName, PathName2, ~] = uiputfile('*.csv', 'Save Cursors', file);
+    if(~iscell(FileName))
+        FileName = {FileName}; end
+    if(FileName{1} == 0)
+        return; 
+    end
+    PathName = PathName2;
+    if(iscell(FileName))
+        FileName = FileName{1}; end
+    dot_index = strfind(FileName,'.');
+    if(isempty(dot_index))
+        dot_index = length(FileName);
+    else
+        dot_index = dot_index(end)-1;
+    end
+    file = [PathName FileName(1:dot_index) '.csv']; 
+    
+    dcm_obj=datacursormode(gcf);
+    cursors = dcm_obj.getCursorInfo;
+    
+   
+    tmp = zeros(2, length(cursors));
+    names = cell(length(cursors),1);
+    for n = 1:1:length(cursors)
+        cursor = cursors(n);
+        tmp(:,n) = cursor.Position;
+        names(n) = cellstr(cursor.Target.Tag);
+    end
+    units = cursor.Target.Parent.Parent.Parent.UserData.Units;
+    
+    [unq_names, ia, ic] = unique(names, 'sorted');
+    max_count = max(hist(ic, unique(ic)));
+    data = struct();
+    cols = cell(1,length(ia));
+    colnames = cell(size(cols));
+    
+    for n = 1:1:length(ic)
+        col_id = ic(n);
+        cols{col_id} = [cols{col_id}; tmp(:, n)'];
+    end
+    
+    for n = 1:1:length(ia)
+        data.(unq_names{n}) =  [num2cell(sortrows(cols{n}, 1)); ...
+            cell(max_count-size(cols{n}, 1), 2)];
+        if(strfind(unq_names{n}, '_FFT'))
+            colnames(n) = {strcat(unq_names(n), {'_f[Hz]' ['_' units]})};
+        else
+            colnames(n) = {strcat(unq_names(n), {'_t[s]' ['_' units]})};
+        end
+    end
+    
+   	output_data = struct2table(data);
+    output_data(2:end+1,:) = output_data; 
+    output_data(1,:) = colnames;
+    
+    writetable(output_data, file, 'FileType', 'text', 'Delimiter', ',', ....
+        'WriteRowNames', 0, 'WriteVariableNames', 0);
+end
 % Returns the folder where the compiled executable actually resides.
 function [executableFolder] = GetExecutableFolder() 
 	try
