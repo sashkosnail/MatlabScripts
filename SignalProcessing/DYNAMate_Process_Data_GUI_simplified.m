@@ -5,6 +5,8 @@ global OUTPUT PathName tab_group wait_window fig
     isTableCol=@(t, thisCol) ismember(thisCol, t.Properties.VariableNames);
     wait_window = waitbar(0,'Please wait...');
     wait_window.Children.Title.Interpreter = 'none';
+    WindowAPI(wait_window, 'TopMost');
+    WindowAPI(wait_window, 'clip', [2 2 360 78]);
     
     version = 'v1.70';
     
@@ -24,7 +26,7 @@ global OUTPUT PathName tab_group wait_window fig
     PathName = char(OUTPUT.cfg.PathName);
     
     if(length(PathName) <= 1 || ~exist(PathName, 'dir'))
-        PathName = [pwd '\']; 
+        PathName = [GetExecutableFolder() '\']; 
     end
     
     figure(wait_window)
@@ -81,8 +83,6 @@ global OUTPUT PathName tab_group wait_window fig
     end
     
     WindowAPI(fig, 'Maximize');
-    WindowAPI(wait_window, 'TopMost');
-    WindowAPI(wait_window, 'clip', [2 2 360 78]);
     
     %save config file
     writetable(cell2table(table2cell(OUTPUT.cfg)', ...
@@ -292,9 +292,9 @@ global PathName OUTPUT wait_window file_progress total_progress
         OUTPUT.Data{idx}.ConfigTable = struct2table(struct(...
             'FileName', datfile, 'DAQVersion', DAQVersion, ...
             'SWVersion', SWVersion, 'Fs', Fs, 'NSamples', length(DATA), ...
-            'Duration', duration, ...
-            'Sensors', OUTPUT.Data{idx}.Nsensors, ...
-            'Filter', FILTERS_str(filter_selected), 'Scale', SCALE_str, ...
+            'SignalDuration', duration, ...
+            'NumberOfSensors', OUTPUT.Data{idx}.Nsensors, ...
+            'AcquisitionFilter', FILTERS_str(filter_selected), 'AcquisitionScale', SCALE_str, ...
             'SensorFc', '4.5', 'SaturationThreshold', OUTPUT.cfg.SatThreshold));
         if(isvalid(wait_window))
             waitbar(total_progress + file_progress*0.3, wait_window, ...
@@ -790,8 +790,8 @@ global OUTPUT info_dialog
     end
     idx = hObject.Parent.UserData.DataIDX;
     
-    widths.Min = [50, 50, 30, 60, 40, 20, 40, 50, 40, 40, 40, 40, 40];
-    widths.Max = [80, 75, 30, 70, 60, 60, 45, 50, 65, 125, 65, 140, 125];
+    widths.Min = [50, 50, 30, 60, 40, 30, 40, 60, 40, 40, 40, 40, 40];
+    widths.Max = [80, 75, 30, 70, 100, 110, 100, 110, 65, 125, 65, 140, 125];
     
     info_dialog = dialog('Units', 'normalized', 'Position', [0.4 0.7 0.1 0.1], ...
         'Name', 'Processing and Aquisition Information', 'Resize', 'on', ... 
