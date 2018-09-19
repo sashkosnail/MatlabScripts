@@ -10,20 +10,20 @@ global OUTPUT PathName tab_group wait_window fig
     
     version = 'v1.70';
     
-    %load config file
+    %load config files
     cfg_file = [GetExecutableFolder() '\DYNAMate.cfg'];
     cfg = readtable(cfg_file, 'FileType', 'text', ...
-        'ReadVariableNames', false, 'ReadRowNames', true, 'Delimiter', '\t');
-    tmp = array2table(table2array(cfg)', ...
+        'ReadVariableNames', false, 'ReadRowNames', true, ...
+		'Delimiter', '\t');
+    OUTPUT.cfg = array2table(table2array(cfg)', ...
         'VariableNames', cfg.Properties.RowNames);
-    tmp2 = str2double(table2array(tmp(:,:)));
-    OUTPUT.cfg = [array2table(tmp2(~isnan(tmp2)), ...
-        'VariableNames', tmp.Properties.VariableNames(~isnan(tmp2))) ...
-        tmp(:,isnan(tmp2))];
-    if(~isTableCol(OUTPUT.cfg, 'EnableFc'))
-        OUTPUT.cfg.targetFc = 0.5;
-    end
-    PathName = char(OUTPUT.cfg.PathName);
+	if(~isTableCol(OUTPUT.cfg, 'EnableFc'))
+		OUTPUT.cfg.targetFc = 0.5;
+	end
+	pathread = readtable('path.cfg', 'FileType', 'text', ...
+		'ReadVariableNames', true, 'ReadRowNames', false, ...
+		'Delimiter', '\t');
+    PathName = char(pathread.PathName);
     
     if(length(PathName) <= 1 || ~exist(PathName, 'dir'))
         PathName = [GetExecutableFolder() '\']; 
@@ -42,8 +42,7 @@ global OUTPUT PathName tab_group wait_window fig
         delete(wait_window)
         delete(fig)
         return; 
-    end
-    OUTPUT.cfg.PathName = PathName;
+	end
     OUTPUT.Source_FileName = FileName;
     OUTPUT.DoAll = 0;
 
@@ -84,11 +83,11 @@ global OUTPUT PathName tab_group wait_window fig
     
     WindowAPI(fig, 'Maximize');
     
-    %save config file
-    writetable(cell2table(table2cell(OUTPUT.cfg)', ...
-        'RowNames', OUTPUT.cfg.Properties.VariableNames), cfg_file, ...
+    %save path file
+    writetable(cell2table({PathName}, ...
+        'VariableNames', {'PathName'}), 'path.cfg', ...
         'FileType', 'text', 'Delimiter', '\t', ...
-        'WriteVariableNames', false, 'WriteRowNames', true);
+        'WriteVariableNames', true, 'WriteRowNames', false);
     
     %try to read data exit if bad
     if(read_Data()==-1)
@@ -106,7 +105,7 @@ global OUTPUT tab_group wait_window file_progress total_progress
     %create parameters
 
     %create UI controls
-    start_position = [40 2];
+    start_position = [70 2];
 
     next_size = [100 35];
     data_type_pd = uicontrol('Parent', tab, 'Style', 'popupmenu',...
@@ -607,11 +606,14 @@ global OUTPUT fig
         else
             ax.XAxis.TickLabels = [];
         end
-        text(t(2), max(ax.YLim), sprintf(' %s %s', tab.UserData.Units, ...
-            sensor_name{:}), ...
-            'Color', 'k', 'BackgroundColor', 'none', 'Parent', ax, ...
-            'VerticalAlignment', 'top', 'Margin', 0.0001, ...
-            'FontSize', 18, 'FontWeight', 'bold');
+%         text(t(2), max(ax.YLim), sprintf(' %s %s', tab.UserData.Units, ...
+%             sensor_name{:}), 'Parent', ax, ...
+%             'Color', 'k', 'BackgroundColor', 'none', ...
+%             'VerticalAlignment', 'top', 'Margin', 0.0001, ...
+%             'FontSize', 18, 'FontWeight', 'bold');
+		ylabel(ax, sprintf('%s\n%s', sensor_name{:}, tab.UserData.Units), ...
+			'Color', 'k', 'BackgroundColor', 'none', ...
+            'FontSize', 10, 'FontWeight', 'bold', 'Margin', 1);
     end
     %setup Legend
     axes(ax);
@@ -889,11 +891,13 @@ global OUTPUT
     parent_size = hObject.Position;
     ch_axis = hObject.UserData;
     
-    ch_axis.Spacing = [40 27];
+    ch_axis.Spacing = [70 27 40];
+	
+	plotM = ch_axis.Spacing(3);
 
     plotL = ch_axis.Spacing(1);
     plotHsig = floor(0.7*parent_size(3));
-    plotHfft = parent_size(3) - 2*plotL - plotHsig;
+    plotHfft = parent_size(3) - plotL - plotM - plotHsig;
 
     plotV = parent_size(4) - ch_axis.Spacing(2);
     plotB = ch_axis.Spacing(2) + rem(plotV, num_sensors);
@@ -903,7 +907,7 @@ global OUTPUT
     ch_axis.SignalAxis(id+1).Position = ...
                     [plotL, plotV*id+plotB, plotHsig, plotV];
     ch_axis.SpectrumAxis(id+1).Position = ...
-                    [2*plotL+plotHsig, plotV*id+plotB, plotHfft, plotV];
+                    [plotL+plotHsig+plotM, plotV*id+plotB, plotHfft, plotV];
     end
     l = ch_axis.SignalAxis(id+1).UserData;
     if(~isempty(l))
