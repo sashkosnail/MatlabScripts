@@ -12,22 +12,26 @@ global OUTPUT PathName tab_group wait_window fig
     
     %load config files
     cfg_file = [GetExecutableFolder() '\DYNAMate.cfg'];
+	fileattrib(cfg_file, '+w');
     cfg = readtable(cfg_file, 'FileType', 'text', ...
         'ReadVariableNames', false, 'ReadRowNames', true, ...
 		'Delimiter', '\t');
+	tmp = array2table(table2array(cfg)', ...
+          'VariableNames', cfg.Properties.RowNames);
     OUTPUT.cfg = array2table(table2array(cfg)', ...
         'VariableNames', cfg.Properties.RowNames);
-	if(~isTableCol(OUTPUT.cfg, 'EnableFc'))
-		OUTPUT.cfg.targetFc = 0.5;
-	end
-	pathread = readtable('path.cfg', 'FileType', 'text', ...
-		'ReadVariableNames', true, 'ReadRowNames', false, ...
-		'Delimiter', '\t');
-    PathName = char(pathread.PathName);
+    tmp2 = str2double(table2array(tmp(:,:)));
+    OUTPUT.cfg = [array2table(tmp2(~isnan(tmp2)), ...
+        'VariableNames', tmp.Properties.VariableNames(~isnan(tmp2))) ...
+        tmp(:,isnan(tmp2))];
+    if(~isTableCol(OUTPUT.cfg, 'EnableFc'))
+        OUTPUT.cfg.targetFc = 0.5;
+    end
+    PathName = char(OUTPUT.cfg.PathName);
     
     if(length(PathName) <= 1 || ~exist(PathName, 'dir'))
         PathName = [GetExecutableFolder() '\']; 
-    end
+	end
     
     figure(wait_window)
     waitbar(0.05, wait_window, 'Select Input Files');
@@ -43,6 +47,7 @@ global OUTPUT PathName tab_group wait_window fig
 		delete(fig)
 		return; 
 	end
+	OUTPUT.cfg.PathName = PathName;
     OUTPUT.Source_FileName = FileName;
     OUTPUT.DoAll = 0;
 
@@ -84,10 +89,14 @@ global OUTPUT PathName tab_group wait_window fig
     WindowAPI(fig, 'Maximize');
     
     %save path file
-    writetable(cell2table({PathName}, ...
-        'VariableNames', {'PathName'}), 'path.cfg', ...
-        'FileType', 'text', 'Delimiter', '\t', ...
-        'WriteVariableNames', true, 'WriteRowNames', false);
+	tmp = OUTPUT.cfg;
+	if(~isTableCol(OUTPUT.cfg, 'EnableFc'))
+		tmp.targetFc = [];
+	end
+    writetable(cell2table(table2cell(tmp)', ...
+        'RowNames', OUTPUT.cfg.Properties.VariableNames), cfg_file, ...
+		'FileType', 'text', 'Delimiter', '\t', ...
+        'WriteVariableNames', false, 'WriteRowNames', true);
     
     %try to read data exit if bad
     if(read_Data()==-1)
