@@ -3,12 +3,15 @@ function DYNAMate_Process_Data_GUI_simplified(varargin)
 clearvars -global OUTPUT
 global OUTPUT PathName tab_group wait_window fig
     isTableCol=@(t, thisCol) ismember(thisCol, t.Properties.VariableNames);
+	if(ishandle(wait_window))
+		delete(wait_window)
+	end
     wait_window = waitbar(0,'Please wait...');
     wait_window.Children.Title.Interpreter = 'none';
     WindowAPI(wait_window, 'TopMost');
     WindowAPI(wait_window, 'clip', [2 2 360 78]);
     
-    version = 'v1.71';
+    version = 'v1.72';
     
     %load config files
     cfg_file = [GetExecutableFolder() '\DYNAMate.cfg'];
@@ -29,8 +32,8 @@ global OUTPUT PathName tab_group wait_window fig
     end
     PathName = char(OUTPUT.cfg.PathName);
     
-    if(length(PathName) <= 1 || ~exist(PathName, 'dir'))
-        PathName = [GetExecutableFolder() '\']; 
+	if(length(PathName) <= 1 || ~exist(PathName, 'dir'))
+		PathName = [GetExecutableFolder() '\']; 
 	end
     
     figure(wait_window)
@@ -109,7 +112,7 @@ function createNewTab(idx)
 global OUTPUT tab_group wait_window file_progress total_progress
     tab = uitab('Parent', tab_group, 'Title', OUTPUT.Data{idx}.FileName, ...
         'Units', 'pixels');
-
+	
     num_sensors = OUTPUT.Data{idx}.Nsensors;
     %create parameters
 
@@ -182,10 +185,12 @@ global OUTPUT tab_group wait_window file_progress total_progress
     for id = 0:1:num_sensors - 1
         ch_axis.SignalAxis(id+1) = subplot('Position', [0 0 0 0], ...
             'Units', 'pixels', 'Parent', axis_panel, 'Xgrid', 'on', ...
-            'Ygrid', 'on', 'Color', 'w', 'XTick', [], 'YTick', []);
+            'Ygrid', 'on', 'Color', 'w', 'XTick', [], 'YTick', [], ... 
+            'Clipping', 'off');
         ch_axis.SpectrumAxis(id+1) = subplot('Position', [0 0 0 0], ...
             'Units', 'pixels', 'Parent', axis_panel, 'Xgrid', 'on', ...
-            'Ygrid', 'on', 'Color', 'w', 'XTick', [], 'YTick', []);
+            'Ygrid', 'on', 'Color', 'w', 'XTick', [], 'YTick', [], ... 
+            'Clipping', 'off');
     end
     linkaxes(ch_axis.SignalAxis);
     linkaxes(ch_axis.SpectrumAxis);
@@ -437,7 +442,12 @@ global OUTPUT wait_window total_progress file_progress
     data = OUTPUT.Data{idx}.DATA.RAW;
     t = OUTPUT.Data{idx}.DATA.Time;
     
-    numCH = size(data,2);
+	numCH = size(data,2);
+	if(~mod(OUTPUT.Data{idx}.SignalNSamples, 2))
+		t = [t; t(end)+Ts];
+		data = [data; zeros(1, numCH)];
+		N = N+1;
+	end
     
     if(isvalid(wait_window))
         waitbar(total_progress + file_progress*0.4, wait_window, ...
@@ -449,7 +459,7 @@ global OUTPUT wait_window total_progress file_progress
     taper = repmat(taper, 1, numCH);
     data = (data - repmat(mean(data),N,1)).*taper;
     offset = repmat(mean(data),N,1);
-    data = data - offset;   
+    data = data - offset;
     
     switch OUTPUT.DoAll
         case 0
@@ -503,8 +513,16 @@ global OUTPUT wait_window total_progress file_progress
     %Calculate Acceleration and Displacement
     Displacement = cumtrapz(t, data);
     Displacement = Displacement - repmat(mean(Displacement),N,1);
-    Acceleration = [zeros(1, numCH); diff(data/1000)/Ts];
+	Velocity = data;
+	Acceleration = [zeros(1, numCH); diff(data/1000)/Ts];
     Acceleration = Acceleration - repmat(mean(Acceleration),N,1);
+	
+	if(~mod(OUTPUT.Data{idx}.SignalNSamples, 2))
+		Displacement = Displacement(1:end-1, :);
+		Acceleration = Acceleration(1:end-1, :);
+		Velocity = Velocity(1:end-1, :);
+		t = t(1:end-1);
+	end
     
     if(isvalid(wait_window))
         waitbar(total_progress + file_progress*0.7, wait_window, ...
@@ -521,7 +539,7 @@ global OUTPUT wait_window total_progress file_progress
     end
     %set data to output
     %time
-    OUTPUT.Data{idx}.DATA.Velocity = data; %[mm/s]
+    OUTPUT.Data{idx}.DATA.Velocity = Velocity; %[mm/s]
     OUTPUT.Data{idx}.DATA.Acceleration = Acceleration; %[m/s^2]
     OUTPUT.Data{idx}.DATA.Displacement = Displacement; %[mm]
     %spectrum
@@ -532,7 +550,7 @@ global OUTPUT wait_window total_progress file_progress
     f(1) = 0;
     OUTPUT.Data{idx}.FFT.Frequency = f;
     %stats
-    OUTPUT.Data{idx}.VStatsTable = signal_stats([t data], ...
+    OUTPUT.Data{idx}.VStatsTable = signal_stats([t Velocity], ...
         OUTPUT.Sensor_configuration.ChannelNames);
     OUTPUT.Data{idx}.AStatsTable = signal_stats([t Acceleration], ...
         OUTPUT.Sensor_configuration.ChannelNames);
@@ -566,8 +584,8 @@ global OUTPUT fig
     
     %Plot Data
     data_range = max(max(abs(data)));
-    fft_range = [max(10^-6, min(min(abs(fftdata(2:end,:))))) ...
-        max(max(abs(fftdata(2:end,:))))];
+    fft_range = ceil(log10(max(max(abs(fftdata(2:end,:))))));
+	fft_range = 10.^(fft_range + [-4 0]);
     for idx = 0:1:num_sensors - 1
         data_id = ((num_sensors -1 - idx)*3 + 1):((num_sensors - idx)*3);
         sensor_name = OUTPUT.Sensor_configuration.SensorNames(num_sensors - idx);
@@ -868,11 +886,14 @@ function data_type_pd_callback(hObject, ~)
 end
 
 function figure_close_cb(~, ~)
-global wait_window
+global wait_window info_dialog
     try
-        if(ishandle(wait_window) || isvalid(wait_window))
-            delete(wait_window)
-        end
+		if(ishandle(wait_window) || isvalid(wait_window))
+			delete(wait_window)
+		end
+		if(ishandle(info_dialog) || isvalid(info_dialog))
+			delete(info_dialog)
+		end
     catch
     end
 end
@@ -889,9 +910,12 @@ end
 
 function panel_szChange(hObject, ~)
 global OUTPUT
-    if(~isfield(OUTPUT, 'Data'))
-        return;
-    end
+	if(~isfield(OUTPUT, 'Data'))
+		return;
+	end
+	if(isempty(OUTPUT.Data{1}))
+		return;
+	end
     num_sensors = OUTPUT.Data{1}.Nsensors;
     parent_size = hObject.Position;
     ch_axis = hObject.UserData;
@@ -923,12 +947,23 @@ global OUTPUT
 end
 
 function zoom_button_callback(hObject, ~)
+    h=zoom();
+    h.ActionPreCallback = @prezoomCB;
+    h.ActionPostCallback = @postzoomCB;
     if(hObject.Value == 1)
-        zoom on;
+        h.Enable = 'on';
         hObject.UserData(1).Value = 0;
         hObject.UserData(2).Value = 0;
     else
-        zoom off;
+        h.Enable = 'off';
+    end
+    function prezoomCB(hObject, eventData)
+        disp('PRE');
+        disp(eventData.Axes.YLim)
+    end
+    function postzoomCB(hObject, eventData)
+        disp('POST');
+        disp(eventData.Axes.YLim)
     end
 end
 
@@ -969,6 +1004,7 @@ function output_txt = datatip_format(~, event_obj)
 end
 
 function choice = choosefixDialog(targetFc)
+global OUTPUT
     choice = 'No';
     d = dialog('Units', 'normalized', 'Position', [0.4 0.7 0.1 0.1], ...
         'Name', 'Sensor Correction');
@@ -978,26 +1014,43 @@ function choice = choosefixDialog(targetFc)
     
     uicontrol('Parent', d, 'Style', 'text', 'Position', [20 50 335 40], ...
         'String', ['Correct sensor reponse to ' num2str(targetFc) 'Hz?'], ...
-        'FontSize', 14);
+        'FontSize', 14, 'KeyPressFcn', @keypressCB);
     
     start_position = [20 20];
     next_size = [80 30];
-    uicontrol('Parent', d, 'Position', [start_position next_size], ...
-        'Callback', @makechoice, 'String', 'Yes');
+    yb = uicontrol('Parent', d, 'Position', [start_position next_size], ...
+        'Callback', @makechoice, 'KeyPressFcn', @keypressCB, 'String', 'Yes');
+    start_position(1) = start_position(1) + next_size(1) + 5;
+    next_size = [80 30];
+    yab = uicontrol('Parent', d, 'Position', [start_position next_size], ...
+        'Callback', @makechoice, 'KeyPressFcn', @keypressCB, 'String', 'Yes to All');
+    start_position(1) = start_position(1) + next_size(1) + 5;
+    next_size = [80 30];
+    nab = uicontrol('Parent', d, 'Position', [start_position next_size], ...
+        'Callback', @makechoice, 'KeyPressFcn', @keypressCB, 'String', 'No to All');
     start_position(1) = start_position(1) + next_size(1) + 5;
     next_size = [80 30];
     uicontrol('Parent', d, 'Position', [start_position next_size], ...
-        'Callback', @makechoice, 'String', 'Yes to All');
-    start_position(1) = start_position(1) + next_size(1) + 5;
-    next_size = [80 30];
-    uicontrol('Parent', d, 'Position', [start_position next_size], ...
-        'Callback', @makechoice, 'String', 'No to All');
-    start_position(1) = start_position(1) + next_size(1) + 5;
-    next_size = [80 30];
-    uicontrol('Parent', d, 'Position', [start_position next_size], ...
-        'Callback', @makechoice, 'Tag', 'No', 'String', 'No');
+        'Callback', @makechoice, 'KeyPressFcn', @keypressCB, 'Tag', 'No', 'String', 'No');
+	
+	if(length(OUTPUT.Source_FileName)<2)
+		yab.Enable = 'off';
+		nab.Enable = 'off';
+		uicontrol(yb);
+	else
+		uicontrol(yab);
+	end
+	
     WindowAPI(d, 'TopMost');
     uiwait(d);
+	
+	function keypressCB(hObject, eventData)
+		if(~(strcmp(eventData.Key, 'return')||strcmp(eventData.Key, ' ')))
+			return;
+		end
+		makechoice(hObject);
+	end
+
     function makechoice(button, ~)
         choice = button.String;
         delete(button.Parent);
@@ -1086,3 +1139,4 @@ function [executableFolder] = GetExecutableFolder()
 	end
 	return;
 end
+%end

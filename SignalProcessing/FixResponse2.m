@@ -12,15 +12,16 @@ function [corrected, freqs, correction] = FixResponse2(data, sFreqs, ...
     fs = repmat(sFreqs, N, 1);
     f = repmat((0:N-1)'*Fs/N, 1, num_chans);
     ft = repmat(targetF, N, num_chans);
-    tmp = zeros(size(fs)); tmp(1,:) = 10^-30;
-    FT = f./ft + tmp;
+    FT = f./ft;
     FS = (f./fs).^2;
-    iSresp = (FS + tmp)./sqrt((1-FS).^2 + 2*FS);
+    iSresp = FS./sqrt((1-FS).^2 + 2*FS);
+	iSresp(1,:) = 10^-30;
     linedrop = ones(size(iSresp));
     linedrop(FT<1) = FT(FT<1).^(steepnes);
     correction = linedrop./iSresp;
-    correction = correction + correction(end:-1:1,:) - ...
-        repmat(correction(end,:),length(correction),1);
+    correction = correction(1:1:end, :) + ...
+		[correction(end, :); correction(end:-1:2, :)] - ...
+        repmat(correction(end, :), length(correction), 1);
     fftdata = fft(data);
     corrected = ifft(fftdata.*correction, 'symmetric');
     
