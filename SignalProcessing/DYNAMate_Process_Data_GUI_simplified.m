@@ -11,7 +11,7 @@ global OUTPUT PathName tab_group wait_window fig
     WindowAPI(wait_window, 'TopMost');
     WindowAPI(wait_window, 'clip', [2 2 360 78]);
     
-    version = 'v1.72';
+    version = 'v1.73';
     
     %load config files
     cfg_file = [GetExecutableFolder() '\DYNAMate.cfg'];
@@ -1009,11 +1009,20 @@ global OUTPUT
     d = dialog('Units', 'normalized', 'Position', [0.4 0.7 0.1 0.1], ...
         'Name', 'Sensor Correction');
     d.Units = 'pixels';
-    d.Position(3:4) = [375 100];
+	if(length(OUTPUT.Source_FileName)>1)
+		d.Position(3:4) = [375 100];
+		text_width = 335;
+		text_bottom = 50;
+	else
+		d.Position(3:4) = [200 120];
+		text_width = 180;
+		text_bottom = 60;
+	end
     WindowAPI(d, 'Button', 'off');
-    
-    uicontrol('Parent', d, 'Style', 'text', 'Position', [20 50 335 40], ...
-        'String', ['Correct sensor reponse to ' num2str(targetFc) 'Hz?'], ...
+	
+	uicontrol('Parent', d, 'Style', 'text', ...
+		'Position', [20 text_bottom text_width d.Position(4)-text_bottom-10], 'String', ...
+		['Correct sensor response to ' num2str(targetFc) 'Hz'], ...
         'FontSize', 14, 'KeyPressFcn', @keypressCB);
     
     start_position = [20 20];
@@ -1021,21 +1030,23 @@ global OUTPUT
     yb = uicontrol('Parent', d, 'Position', [start_position next_size], ...
         'Callback', @makechoice, 'KeyPressFcn', @keypressCB, 'String', 'Yes');
     start_position(1) = start_position(1) + next_size(1) + 5;
-    next_size = [80 30];
-    yab = uicontrol('Parent', d, 'Position', [start_position next_size], ...
+    
+	if(length(OUTPUT.Source_FileName)>1)
+		next_size = [80 30];
+		yab = uicontrol('Parent', d, 'Position', [start_position next_size], ...
         'Callback', @makechoice, 'KeyPressFcn', @keypressCB, 'String', 'Yes to All');
-    start_position(1) = start_position(1) + next_size(1) + 5;
-    next_size = [80 30];
-    nab = uicontrol('Parent', d, 'Position', [start_position next_size], ...
+		start_position(1) = start_position(1) + next_size(1) + 5;
+		next_size = [80 30];
+		uicontrol('Parent', d, 'Position', [start_position next_size], ...
         'Callback', @makechoice, 'KeyPressFcn', @keypressCB, 'String', 'No to All');
-    start_position(1) = start_position(1) + next_size(1) + 5;
+		start_position(1) = start_position(1) + next_size(1) + 5;
+	end
+    
     next_size = [80 30];
     uicontrol('Parent', d, 'Position', [start_position next_size], ...
         'Callback', @makechoice, 'KeyPressFcn', @keypressCB, 'Tag', 'No', 'String', 'No');
 	
 	if(length(OUTPUT.Source_FileName)<2)
-		yab.Enable = 'off';
-		nab.Enable = 'off';
 		uicontrol(yb);
 	else
 		uicontrol(yab);
