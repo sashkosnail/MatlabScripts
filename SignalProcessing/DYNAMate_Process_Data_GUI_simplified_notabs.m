@@ -219,7 +219,7 @@ global PathName OUTPUT wait_window
 	Dtable = TDMSStruct.DATA;
 	Fs = 1/(Dtable{2,1}-Dtable{1,1});
 	duration = round(Dtable{end,1}-Dtable{1,1}+1/Fs);
-	DATA = Dtable{:,[1 OUTPUT.SensorConfig.DataChannels]};
+	DATA = Dtable{:,[1 OUTPUT.SensorConfig.DataChannels + 1]};
 	CONFIG = Dtable{:,26:end};
 
 	%Extract confguration information
@@ -243,13 +243,28 @@ global PathName OUTPUT wait_window
 	end
 
 	if(SCALE)
-		PossibleSaturationCH = find(sum(abs(DATA(:,2:end)) > ...
+		SaturatedChannels = find(sum(abs(DATA(:,2:end)) > ...
 			OUTPUT.RuntimeCFG.SatThreshold*SCALE));
+		tmp_sat_chans = zeros(length(SaturatedChannels),3);
+		tmp = OUTPUT.Tables.SensorConfig.ChannelsUsed;
+		tmp = reshape(1:1:(size(DATA,2) - 1), size(tmp'))';
+		tmp_sat_sensors = zeros(length(SaturatedChannels),1);
+		for sn = 1:1:length(SaturatedChannels)
+			[tmp_sat_sensors(sn), ~] = find(tmp == SaturatedChannels(sn));
+			tmp_sat_chans(sn,:) = tmp(tmp_sat_sensors(sn),:);
+		end
+		tmp = unique(tmp_sat_chans, 'rows');
+		SaturatedSensors = unique(tmp_sat_sensors);
+		SaturatedChannelsFull = reshape(tmp', 1, numel(tmp));
 	else
-		PossibleSaturationCH =[];
+		SaturatedChannels = [];
+		SaturatedChannelsFull = [];
+		SaturatedSensors = [];
 	end
 	
-	OUTPUT.SensorConfig.PossibleSaturationCH = PossibleSaturationCH;
+	OUTPUT.SensorConfig.SaturatedChannels = SaturatedChannels;
+	OUTPUT.SensorConfig.SaturatedChannelsFull = SaturatedChannelsFull;
+	OUTPUT.SensorConfig.SaturatedSensors = SaturatedSensors;
 	
 	OUTPUT.SW_version = SWVersion;
 	OUTPUT.DAQ_version = DAQVersion;
@@ -377,7 +392,7 @@ global PathName OUTPUT
         %reorder based on comps
         comp_set = [cn(comps == 'x') cn(comps == 'y') cn(comps == 'z')];
         %add one to skip over time column and append to final vector
-        data_channels((sensor*3-2):(sensor*3)) = comp_set + 1;
+        data_channels((sensor*3-2):(sensor*3)) = comp_set;
     end
     sensor_config = [sensor_config table(reshape(data_channels,3,[])', ...
 		'VariableNames', {'ChannelsUsed'})];
@@ -431,29 +446,31 @@ global OUTPUT wait_window
     data = (data - repmat(mean(data),N,1)).*taper;
     offset = repmat(mean(data),N,1);
     data = data - offset;
+	
+	sat_channels = OUTPUT.SensorConfig.SaturatedChannels;
+	sat_channelsFull = OUTPUT.SensorConfig.SaturatedChannelsFull;
     
     if(strcmp('Yes', choosefixDialog(targetFc)))
-        if(OUTPUT.SensorConfig.PossibleSaturationCH)
-            msg = strjoin([{'For File:'} {OUTPUT.SourceFileName} ...
-                {'Possible Saturation Detected on these Channels:'} ...
-                OUTPUT.SensorConfig.ChannelNames(...
-                OUTPUT.SensorConfig.PossibleSaturationCH) ...
-     {'Sensor freqeuncy correction is DISABLED for these channels'}],'\n');
-            sat_win = warndlg(msg, 'Possible Saturation');
-            WindowAPI(sat_win,'TopMost');
-        end
-        if(isvalid(wait_window))
-            waitbar(0.4, wait_window, ...
-            [wait_window.UserData 'Correcting Sensor Response']);
-        end
+		if(sat_channels)
+			msg = strjoin([{'For File:'} {OUTPUT.SourceFileName} ...
+				{'Possible Saturation Detected on these Channels:'} ...
+				OUTPUT.SensorConfig.ChannelNames(sat_channels) ...
+		{'Sensor freqeuncy correction is DISABLED for these channels'}],'\n');
+			sat_win = warndlg(msg, 'Possible Saturation');
+			WindowAPI(sat_win,'TopMost');
+		end
+		if(isvalid(wait_window))
+			waitbar(0.4, wait_window, ...
+			[wait_window.UserData 'Correcting Sensor Response']);
+		end
+		
         [data, ~, ~] = FixResponse2(data, ...
             OUTPUT.SensorConfig.SensorFreqs, targetFc, Fs, ...
-            OUTPUT.SensorConfig.PossibleSaturationCH, corrSteepnes);
+            sat_channelsFull, corrSteepnes);
        
         chan_frqs = targetFc*ones(1, numCH);
-        chan_frqs(OUTPUT.SensorConfig.PossibleSaturationCH) = ...
-			OUTPUT.SensorConfig.SensorFreqs(...
-			OUTPUT.SensorConfig.PossibleSaturationCH);
+        chan_frqs(sat_channelsFull) = ...
+			OUTPUT.SensorConfig.SensorFreqs(sat_channelsFull);
 
         OUTPUT.Tables.SensorConfig = ...
 			[OUTPUT.Tables.SensorConfig ...
@@ -461,7 +478,7 @@ global OUTPUT wait_window
 			OUTPUT.SensorConfig.Nsensors)', 'VariableNames', ...
 			{'xFc_corrected', 'yFc_corrected', 'zFc_corrected'})];
 		
-        OUTPUT.SensorConfig.TestConfig.SensorFc = targetFc;
+        OUTPUT.Tables.TestConfig.SensorFc = targetFc;
     end
     
     if(isvalid(wait_window))
@@ -547,6 +564,18 @@ global OUTPUT fig
 	fft_range = 10.^(fft_range + [-5 0]);
     for idx = 0:1:num_sensors - 1
         data_id = ((num_sensors -1 - idx)*3 + 1):((num_sensors - idx)*3);
+		%saturation differenitation
+		lineStyle = {'-'; '-'; '-'};
+		for sn = 1:1:length(data_id)
+			if(any(OUTPUT.SensorConfig.SaturatedChannels == data_id(sn)))
+				lineStyle{sn} = '--';
+			end
+		end
+		backColor = [1 1 1];
+		if(~any(OUTPUT.SensorConfig.SaturatedSensors == (idx+1)))
+			backColor = backColor*0.9;
+		end
+		%name generation
         sensor_name = ...
 			OUTPUT.SensorConfig.SensorNames(num_sensors - idx);
         sensor_names = cellfun(@(c) strcat(c, {'_X';'_Y';'_Z'}), ...
@@ -559,8 +588,9 @@ global OUTPUT fig
         ax = fig.UserData.Panel.UserData.SpectrumAxis(idx+1);
         cla(ax);
         h = loglog(f,fftdata(:,data_id), 'LineWidth', 1, 'Parent', ax);
-        set(h, {'color'}, {'r','b','k'}', {'Tag'}, sensor_names_FFT);
-        set(ax, 'Color', 'w', 'GridColor', 'k', ...
+        set(h, {'color'}, {'r','b','k'}', {'LineStyle'}, lineStyle, ...
+			{'Tag'}, sensor_names_FFT);
+        set(ax, 'Color', backColor, 'GridColor', 'k', ...
             'XAxisLocation', 'bottom', 'NextPlot', 'add', ...
             'XGrid', 'on', 'YGrid', 'on', 'GridLineStyle', '-', ...
             'GridColor', 'k', 'XScale', 'log', 'YScale', 'log', ...
@@ -580,11 +610,13 @@ global OUTPUT fig
         ax = fig.UserData.Panel.UserData.SignalAxis(idx+1);
         cla(ax);	
         h = plot(t,data(:,data_id), 'LineWidth', 1, 'Parent', ax);
-        set(h, {'color'}, {'r','b','k'}', {'Tag'}, sensor_names);
-        set(ax, 'Color', 'w', 'GridColor', 'k', 'XLim', [t(1) t(end)], ...
+        set(h, {'color'}, {'r','b','k'}', {'LineStyle'}, lineStyle, ...
+			{'Tag'}, sensor_names);
+        set(ax, 'Color', backColor, 'GridColor', 'k', ...
+			'XLim', [t(1) t(end)], 'YLim', [-1 1].*data_range, ...
             'XAxisLocation', 'bottom', 'NextPlot', 'add', ...
         'XGrid', 'on', 'YGrid', 'on', 'GridColor', 'k', ...
-        'GridLineStyle', '-', 'YLim', [-1 1].*data_range);
+        'GridLineStyle', '-');
 		if(idx==0)
 			ax.XAxis.Visible = 'on';
 			text('Units', 'normalized', 'Parent', ax, ...
