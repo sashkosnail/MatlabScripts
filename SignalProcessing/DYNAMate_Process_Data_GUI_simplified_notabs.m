@@ -216,7 +216,8 @@ global OUTPUT fig
                 'String', 'f[Hz]', 'FontWeight' ,'bold', 'FontSize', 12);
         else
             ax.XAxis.TickLabels = [];
-        end  
+		end  
+		zoom reset
         %Signal Plot
         ax = fig.UserData.Panel.UserData.SignalAxis(idx+1);
         cla(ax);	
@@ -240,6 +241,7 @@ global OUTPUT fig
 		ylabel(ax, sprintf('%s\n%s', sensor_name{:}, ...
 			fig.UserData.Units), 'Color', 'k', 'FontWeight', 'bold', ...
 			'BackgroundColor', 'none', 'FontSize', 10, 'Margin', 1);
+		zoom reset
     end
     %setup Legend
     axes(ax);
