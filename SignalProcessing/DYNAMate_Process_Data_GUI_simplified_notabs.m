@@ -317,7 +317,7 @@ global PathName OUTPUT wait_window
 		SaturatedChannels = find(sum(abs(DATA(:,2:end)) > ...
 			OUTPUT.RuntimeCFG.SatThreshold*SCALE));
 		tmp_sat_chans = zeros(length(SaturatedChannels),3);
-		tmp = OUTPUT.Tables.SensorConfig.ChannelsUsed;
+		tmp = zeros(OUTPUT.SensorConfig.Nsensors, 3);
 		tmp = reshape(1:1:(size(DATA,2) - 1), size(tmp'))';
 		tmp_sat_sensors = zeros(length(SaturatedChannels),1);
 		for sn = 1:1:length(SaturatedChannels)
@@ -451,8 +451,9 @@ global PathName OUTPUT
         %add one to skip over time column and append to final vector
         data_channels((sensor*3-2):(sensor*3)) = comp_set;
     end
-    sensor_config = [sensor_config table(reshape(data_channels,3,[])', ...
-		'VariableNames', {'ChannelsUsed'})];
+    sensor_config = [sensor_config array2table(reshape(...
+		data_channels, 3, [])', ...
+		'VariableNames', strcat('ChannelUsed', {'_X';'_Y';'_Z'}))];
     names = cellfun(@(c) strcat(c, {'_X';'_Y';'_Z'}), ...
         sensor_names, 'uni', 0);
     names = vertcat(names{:})';
