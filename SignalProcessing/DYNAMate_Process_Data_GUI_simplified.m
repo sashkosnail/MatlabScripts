@@ -535,7 +535,7 @@ global OUTPUT wait_window total_progress file_progress
     fftdata(2:end-1,:) = 2*fftdata(2:end-1,:);
     f = Fs*(0:N/2)'/N;
     if(specSmoothN)
-        fftdata = smoothFFT(fftdata, specSmoothN, f);
+        fftdata = smoothFFT(fftdata, specSmoothN, f, 0);
     end
     %set data to output
     %time
