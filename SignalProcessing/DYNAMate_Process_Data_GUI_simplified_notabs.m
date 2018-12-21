@@ -29,7 +29,7 @@ end
 function createUI()
 global fig OUTPUT
     %create main figure
-    fig = figure(9999);
+    fig = figure();
     minsize = [1200 700];
 	fig_basename = ['DYNAMate Process ' OUTPUT.DMPversion];
     set(fig, 'DeleteFcn', @figure_close_cb, 'NumberTitle', 'off', ...
@@ -208,14 +208,14 @@ global OUTPUT fig
 			'YLim', fft_range, 'XLim', [max(0.1, f(2)), f(end)], ...
 			'YTick', 10.^(floor(log10(min(fft_range)))+1:1:5), ...
 			'XTick', 10.^(-2:1:2));
-        if(idx==0)
-            ax.XAxis.Visible = 'on';
-            text('Units', 'normalized', 'Parent', ax, ...
-                'HorizontalAlignment' , 'right',...
-                'VerticalAlignment' , 'top', 'Position', [1  0], ...
-                'String', 'f[Hz]', 'FontWeight' ,'bold', 'FontSize', 12);
-        else
-            ax.XAxis.TickLabels = [];
+		if(idx==0)
+			ax.XAxis.Visible = 'on';
+			text('Units', 'normalized', 'Parent', ax, ...
+				'HorizontalAlignment' , 'right',...
+				'VerticalAlignment' , 'top', 'Position', [1  0], ...
+				'String', 'f[Hz]', 'FontWeight' ,'bold', 'FontSize', 12);
+		else
+			ax.XAxis.TickLabels = [];
 		end  
 		zoom reset
         %Signal Plot
@@ -499,6 +499,7 @@ global OUTPUT wait_window
     data = data - offset;
 	sat_channels = OUTPUT.SensorConfig.SaturatedChannels;
 	sat_channelsFull = OUTPUT.SensorConfig.SaturatedChannelsFull;
+	data = ShiftFilter(data, 32, 75, 1000);
 	if(strcmp('Yes', choosefixDialog(targetFc)))
 		if(sat_channels)
 			msg = strjoin([{'For File:'} {OUTPUT.SourceFileName} ...
@@ -636,7 +637,7 @@ global OUTPUT PathName fig wait_window
 		tmp.targetFc = [];
 	end
     writetable(cell2table(table2cell(tmp)', ...
-        'RowNames', OUTPUT.RuntimeCFG.Properties.VariableNames), ...
+        'RowNames', tmp.Properties.VariableNames), ...
 		cfg_file, 'FileType', 'text', 'Delimiter', '\t', ...
         'WriteVariableNames', false, 'WriteRowNames', true);
 	if(isvalid(wait_window))
@@ -927,10 +928,10 @@ function output_txt = datatip_format(~, event_obj)
     uY = event_obj.Target.Parent.Parent.Parent.UserData.Units;
     name = event_obj.Target.Tag;
     if(strcmp(event_obj.Target.Parent.XScale, 'log'))
-        output_txt = sprintf('%s\n%5.3e %s\n%3.2f Hz', ...
+        output_txt = sprintf('%s\n%5.3e %s\n%3.3f Hz', ...
             name, pos(2), uY(2:end-1), pos(1));
     else
-        output_txt = sprintf('%s\n%5.3f %s\n%3.2f s', ...
+        output_txt = sprintf('%s\n%5.3f %s\n%3.3f s', ...
             name, pos(2), uY(2:end-1), pos(1));
     end
 end

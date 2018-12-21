@@ -18,8 +18,8 @@ if(exist([PathName 'sensor_configuration.txt'], 'file'))
     sensor_config = sensor_config(1:min(height(sensor_config),8),:);
 else
     %default config
-    sensor_config = table((1:2)', cellstr(strcat('s',num2str((1:2)'))), ...
-        cellstr(repmat('xyz',2,1)), ...
+    sensor_config = table((1:8)', cellstr(strcat('s',num2str((1:8)'))), ...
+        cellstr(repmat('xyz',8,1)), ...
         'VariableNames',{'Ch','Name','Components'});
 end
 
@@ -55,9 +55,9 @@ for idx = 1:1:length(FileName)
     Dtable = TDMS_getStruct([PathName datfile],6);
         
     %extract data from data file
-    t = Dtable{:,1}; 
+    t = Dtable.DATA{:,1}; 
     Fs = 1/(t(2)-t(1));
-    data = [data; Dtable{:,data_channels}]; %#ok<AGROW>
+    data = [data; Dtable.DATA{:,data_channels}]; %#ok<AGROW>
     if(idx == 1)
         T=t;
     else
