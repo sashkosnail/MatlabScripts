@@ -5,7 +5,7 @@ k = (0:N-1)';
 t = k/Fs;
 f = k*Fs/N;
 % f = logspace(-1, 2, N)';
-tmpf = f(1:10:end);
+tmpf = f(10:100:end);
 for fi = 1:1:length(tmpf)
     fc = tmpf(fi); 
     
@@ -24,11 +24,11 @@ for fi = 1:1:length(tmpf)
     Wt = (f./fc.*(f<fc)+(1-(f-fc)./f).*(f>fc)).^n;
     %BPF
     n = 16;
-    tmp = (f./fc).^2;
+    tmp = (f./fc);
     Wbpf = (tmp./((1-tmp).^2 + tmp)).^n;
 
-    windows = [Wb Wguz Wt Wbpf];
-    iwindows = ifft(windows);
+    windows = abs([Wb Wguz Wt Wbpf]);
+    iwindows = abs(ifft(windows));
 
     fig = figure(7777);
     subplot(2,1,1)
