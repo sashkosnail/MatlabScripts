@@ -229,6 +229,9 @@ global OUTPUT fig
             'XAxisLocation', 'bottom', 'NextPlot', 'add', ...
         'XGrid', 'on', 'YGrid', 'on', 'GridColor', 'k', ...
         'GridLineStyle', '-');
+		ax.YAxis.TickLabelFormat='%5.3g';
+% 		ax.YTickLabel = ax.YTick;
+		ax.YTickLabelMode = 'auto';
 		if(idx==0)
 			ax.XAxis.Visible = 'on';
 			text('Units', 'normalized', 'Parent', ax, ...
@@ -238,8 +241,13 @@ global OUTPUT fig
 		else
 			ax.XAxis.TickLabels = [];
 		end
-		ylabel(ax, sprintf('%s\n%s', sensor_name{:}, ...
-			fig.UserData.Units), 'Color', 'k', 'FontWeight', 'bold', ...
+		if(max(abs(data_range))<0.01)
+			tmp_units = ['[u' fig.UserData.Units(3:end)];
+		else
+			tmp_units = fig.UserData.Units;
+		end
+		ylabel(ax, sprintf('%s %s', sensor_name{:}, ...
+			tmp_units), 'Color', 'k', 'FontWeight', 'bold', ...
 			'BackgroundColor', 'none', 'FontSize', 10, 'Margin', 1);
 		zoom reset
     end
@@ -292,7 +300,7 @@ global PathName OUTPUT wait_window
 	end
 	oldDAQ = strcmp(DAQVersion, '1.0');
 	%extract data from data file
-	Dtable = TDMSStruct.DATA;
+	Dtable = TDMSStruct.DATA;%(1000:34001,:);
 	Fs = 1/(Dtable{2,1}-Dtable{1,1});
 	duration = round(Dtable{end,1}-Dtable{1,1}+1/Fs);
 	DATA = Dtable{:,[1 OUTPUT.SensorConfig.DataChannels + 1]};
@@ -499,7 +507,7 @@ global OUTPUT wait_window
     data = data - offset;
 	sat_channels = OUTPUT.SensorConfig.SaturatedChannels;
 	sat_channelsFull = OUTPUT.SensorConfig.SaturatedChannelsFull;
-	data = ShiftFilter(data, 32, 75, 1000);
+% 	data = ShiftFilter(data, 32, 75, 1000);
 	if(strcmp('Yes', choosefixDialog(targetFc)))
 		if(sat_channels)
 			msg = strjoin([{'For File:'} {OUTPUT.SourceFileName} ...

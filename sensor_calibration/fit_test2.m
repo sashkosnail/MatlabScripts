@@ -21,8 +21,8 @@ function peak = fit_test2(data, name, Ts, fit_params)
 %     fo.Weights(wcoff:end) = (0:1:length(n)-wcoff)/(length(n)-wcoff);
     [fdt, gof] = fit(n, data, ft, 'problem', Ts);
     figure(111);clf;plot(data);hold on;plot(fdt);
-    title(name);
-    out_text = sprintf('A: %4.3f Fn: %4.3f D: %4.3f\nn_0: %4.3f phi: %4.3f\nOffset: %4.3f\n RMSE: %4.3f\n', ...
+    title(name,'Interpreter','none');
+    out_text = sprintf('A: %4.3g Fn: %4.3g D: %4.3g\nn_0: %4.3g phi: %4.3g\nOffset: %4.3g\n RMSE: %4.3E\n', ...
         fdt.A, fdt.w0/(2*pi), fdt.D, fdt.n0, fdt.phi, fdt.offset, gof.rmse);
     text(.25*length(data), 2*std(data), out_text, 'FontSize', 15);
     grid minor

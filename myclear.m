@@ -1,4 +1,4 @@
 close all
 clear
-clearvars global
+clearvars -global
 clc

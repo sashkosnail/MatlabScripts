@@ -2,6 +2,7 @@ function [output_data] = step_response2(xlsfile, fit_params, polarity)
 
 tables_n=readtable(xlsfile, 'Sheet', polarity);
 output_data = [];
+figure(1);clf;
 for ctab = {tables_n}
     tab = ctab{1};
     t = table2array(tab(:,1));
@@ -11,8 +12,9 @@ for ctab = {tables_n}
     num_tests = 5;
     
     data = table2array(tab(:,2:2:2*num_tests+1));
-    data=data(:,1:num_tests);
+	pulses = table2array(tab(:,3:2:2*num_tests+1));
     data(isnan(data))=0;
+	pulses(isnan(pulses))=0;
     Nch = min(size(data)) %#ok<NOPRT>
 
     fprintf(strcat('_________________________________________________________________', ...
@@ -23,18 +25,19 @@ for ctab = {tables_n}
         'mean\tstd\t\t|mean\tstd\t\t|mean\tstd\t\t|mean\tstd\t\t|', ...
         'mean\tstd\t\t|\n'))
 
-    [num, den] = butter(8, 20*2/Fs, 'low');
+    [num, den] = butter(8, 32*2/Fs, 'low');
     for i=1:1:Nch
         p=data(:,i);
+		pls=pulses(:,i);
         if (polarity == 'P')
             p=-p;
         end
-        figure(mod(i-1,num_tests)+1);clf;
+        figure(1);
         a = filtfilt(num, den, p);
         %SELECT PEAK
         peak_id = 1;
         figure(100);clf;old_start = 0;hold on; start_id = 0;
-        plot(a); set(gcf, 'Toolbar','none');
+        plot(a); set(gcf, 'Toolbar','none'); plot(pls);
         while true
             if(isempty(a))
                 break;
@@ -109,7 +112,7 @@ for ctab = {tables_n}
             peak_id = peak_id+1;    
 
             %PLOT DATA
-            figure(mod(i-1,1)+1);hold on;
+            figure(1);hold on;
             plot(peak);
             plot(sort([locs; locs + min_id]) ,sort(extr, 'descend').*(-1).^(2:length(extr)+1),'x');
             set(gca, 'xlim', [0 window_size-1]);

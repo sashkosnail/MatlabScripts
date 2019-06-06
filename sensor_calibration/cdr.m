@@ -7,7 +7,7 @@ function cdr(xlsfile, peaks, polarity, ax)
     summary_table = table;
     max_peaks = 0;
     for i=1:1:size(peaks,1)
-        Rin = res_data(1,1);
+        Rin = res_data(1,2);
         Rsh = res_data(i,4);
         Rdaq = res_data(num_pts,4);
         summary_table(i,1:3)={mat2cell(peaks(i,1).Name,1), Rin, Rsh};
@@ -95,19 +95,19 @@ function cdr(xlsfile, peaks, polarity, ax)
     global fitT;
     Fn = cdrFfit.p2;
     D = cdrDfit.p2;
-    CDR = cdrDfit.p1;
-    new_row = array2table([Fn, D, CDR, CDR/(sqrt(0.5)-D)-Rin]);
-    new_row.Properties.VariableNames = {'Fn', 'D', 'CDR', 'Rsh'};
+    CDR = cdrDfit.p1/(1.0-D);
+    new_row = array2table([Fn, D, CDR, CDR*(1-D)*[1/(sqrt(0.5)-D) 1/(3.4-D)]-Rin]);
+    new_row.Properties.VariableNames = {'Fn', 'D', 'CDR', 'R_h07', 'R_h4'};
     fitT = [fitT; new_row];
     
     rrang = [0.75*min(cdrPlot(:,2)) 1.25*max(cdrPlot(:,2))];
-    
+    drang = [0.9*min(cdrPlot(:,4)) 1.1*max(cdrPlot(:,4))];
     axes(ax(1));
     plot(cdrPlot(:,2), cdrPlot(:,4), 'k+-');hold on
     plot(cdrDfit, 'r--');
     text(1.1*min(cdrPlot(:,2)), max(cdrPlot(:,4)), sprintf('%3.2fx + %3.2f', cdrDfit.p1, cdrDfit.p2));
 %     axis([min(cdrPlot(:,2)) max(cdrPlot(:,2)) min(cdrPlot(:,4)) max(cdrPlot(:,4))])
-    axis([rrang 0.5 0.8]);
+    axis([rrang drang]);
     grid minor; ylabel('Damping');
     legend off;
     
@@ -119,6 +119,6 @@ function cdr(xlsfile, peaks, polarity, ax)
     global frange
     frange = floor(100*(min(cdrPlot(:,5))+[-0.1 range(cdrPlot(:,5))+0.1]))/100;
     axis([rrang frange]);
-    grid minor; xlabel('1/R'); ylabel('Fn[Hz]');
+    grid minor; xlabel('1/Req'); ylabel('Fn[Hz]');
     legend off;
 end
