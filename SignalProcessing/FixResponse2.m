@@ -4,7 +4,7 @@ function [corrected, freqs, correction] = FixResponse2(data, sFreqs, ...
         ignore_channels = [];
     end
     if(~exist('steepnes', 'var'))
-        ignore_channels = 6;
+        steepnes = 6;
     end
     
     num_chans = size(data,2);

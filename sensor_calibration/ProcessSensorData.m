@@ -18,50 +18,52 @@ bbcc = bbcc(3:end);
 
 for fldr_id = 1:length(bbcc)
     WorkPath=[PathName '\' bbcc{fldr_id}];
-	
+	if(strcmp(bbcc{fldr_id}, 'Results'))
+		continue;
+	end
     xls_file = dir([WorkPath '\*.xlsx']);
     xls_file = [WorkPath '\' xls_file(1).name];
 % 	if(exist([xls_file(1:end-5) '.mat'],'file'))
 % 		disp(['Skipping ' WorkPath])
 % 		continue;
 % 	end
-%     tdms_files = dir([WorkPath '\*.tdms']);
-% 
-%     max_length_p = 0;
-%     max_length_n = 0;
-%     Ts = -1;
-%     disp(WorkPath)
-% 
-%     for idx = 1:numel(tdms_files)
-%         tdms = tdms_files(idx);
-%         disp(tdms.name);
-%         polarity = upper(tdms.name(1));
-%         index = [(64+(6-str2double(tdms.name(2)))*2) '2'];
-% 
-%         tdms = [WorkPath '\' tdms_files(idx).name];
-%         tdmsStruct = TDMS_getStruct(tdms, 2);
-% 
-%         data_sensor = tdmsStruct.groups.chans(1).data;
-%         data_pulse = tdmsStruct.groups.chans(2).data;
-%         data = [data_sensor' data_pulse'];
-%         xlswrite(xls_file, data, polarity, index);
-% 
-%         if(polarity == 'N')
-%             max_length_n = max(max_length_n, length(data));
-%         else
-%             max_length_p = max(max_length_p, length(data));
-%         end
-%         Ts = tdmsStruct.groups.chans(1).propValues(3);
-%         Ts = Ts{1};
-% 	end
-% 	if(max_length_n)
-% 		xlswrite(xls_file, (0:1:max_length_n-1)'*Ts, 'N', ...
-% 			['A2:A' num2str(max_length_n + 1)]);
-% 	end
-% 	if(max_length_p)
-% 		xlswrite(xls_file, (0:1:max_length_p-1)'*Ts, 'P', ...
-% 			['A2:A' num2str(max_length_p + 1)]);
-% 	end
+    tdms_files = dir([WorkPath '\*.tdms']);
+
+    max_length_p = 0;
+    max_length_n = 0;
+    Ts = -1;
+    disp(WorkPath)
+
+    for idx = 1:numel(tdms_files)
+        tdms = tdms_files(idx);
+        disp(tdms.name);
+        polarity = upper(tdms.name(1));
+        index = [(64+(6-str2double(tdms.name(2)))*2) '2'];
+
+        tdms = [WorkPath '\' tdms_files(idx).name];
+        tdmsStruct = TDMS_getStruct(tdms, 2);
+
+        data_sensor = tdmsStruct.groups.chans(1).data;
+        data_pulse = tdmsStruct.groups.chans(2).data;
+        data = [data_sensor' data_pulse'];
+        xlswrite(xls_file, data, polarity, index);
+
+        if(polarity == 'N')
+            max_length_n = max(max_length_n, length(data));
+        else
+            max_length_p = max(max_length_p, length(data));
+        end
+        Ts = tdmsStruct.groups.chans(1).propValues(3);
+        Ts = Ts{1};
+	end
+	if(max_length_n)
+		xlswrite(xls_file, (0:1:max_length_n-1)'*Ts, 'N', ...
+			['A2:A' num2str(max_length_n + 1)]);
+	end
+	if(max_length_p)
+		xlswrite(xls_file, (0:1:max_length_p-1)'*Ts, 'P', ...
+			['A2:A' num2str(max_length_p + 1)]);
+	end
 
     %% Run Step Response Analyzer
     fit_params.A = [0.001 100];
@@ -107,10 +109,11 @@ for fldr_id = 1:length(bbcc)
 	linkaxes([ax11, ax12, ax13])
 	linkaxes([ax21, ax22, ax23])
 
-    titlex = mean(get(ax12,'XLim'));
+    titlex = min(get(ax12,'XLim'));
     titley = get(ax12, 'YLim');
     titley = titley(2)-0.1*range(titley);
-    text(titlex, titley, xls_file(find(xls_file=='\',1,'last')+1:end-5), 'Parent', ax12, 'FontSize', 20)
+    text(titlex, titley, xls_file(find(xls_file=='\',1,'last')+1:end-5), ...
+		'Parent', ax12, 'FontSize', 20, 'Interpreter', 'none')
 
     ax21.YLim = frange;
     ax22.YLim = frange;

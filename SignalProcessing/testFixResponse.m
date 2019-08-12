@@ -16,7 +16,7 @@ taper = repmat(taper, 1, size(data,2));
 % data = data1 - offset;
 data = (data - repmat(mean(data),length(data),1)).*taper;
 
-[fix_data, f, correction] = FixResponse2(data, -1, targetFc, Fs);
+[fix_data, f, correction] = FixResponse2(data, repmat(4.5,1,size(data,2)), targetFc, Fs);
 
 cf = figure(999);
 cf.Name = 'Correction Curve';
@@ -33,9 +33,15 @@ cf = figure(888);
 cf.Name = 'Spectra';
 subplot(2,1,1)
 loglog(f(1:floor(length(f)/2)), in_fft(1:floor(length(f)/2),:));
+grid on; hold on;
+loglog(4.5*[1 1], 10.^[-5 5], 'g--');
+loglog(targetFc*[1 1], 10.^[-5 5], 'r--');
 title('In Spectra')
 subplot(2,1,2)
 loglog(f(1:floor(length(f)/2)), out_fft(1:floor(length(f)/2),:));
+grid on; hold on;
+loglog(4.5*[1 1], 10.^[-5 5], 'g--');
+loglog(targetFc*[1 1], 10.^[-5 5], 'r--');
 title('Out Spectra')
 
 

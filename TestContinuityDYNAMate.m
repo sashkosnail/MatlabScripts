@@ -67,7 +67,7 @@ for idx = 1:1:length(FileName)
 end
 %% 
 figure(); clf
-nbreaks = length(breaks)-1;
+nbreaks = length(breaks);
 for n=1:1:nbreaks
     subplot(1,nbreaks, n)
     plot(T, data);hold on

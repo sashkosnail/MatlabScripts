@@ -9,7 +9,7 @@ for ctab = {tables_n}
     Ts = t(2)-t(1);
     Fs = 1/Ts;
     Wn = 512;
-    num_tests = 5;
+    num_tests = (width(tab)-1)/2;
     
     data = table2array(tab(:,2:2:2*num_tests+1));
 	pulses = table2array(tab(:,3:2:2*num_tests+1));

@@ -2,7 +2,7 @@
 function DYNAMate_Process_Data_GUI_simplified_notabs(varargin)
 clearvars -global OUTPUT
 global OUTPUT PathName
-	OUTPUT.DMPversion = 'v1.81';  
+	OUTPUT.DMPversion = 'v1.91';  
     %load config files
     cfg_file = [GetExecutableFolder() '\DYNAMate.cfg'];
 	fileattrib(cfg_file, '+w');
@@ -266,25 +266,13 @@ end
 %deal with Data
 function read_Data()
 global PathName OUTPUT wait_window
-    isTableCol=@(t, thisCol) ismember(thisCol, t.Properties.VariableNames);
-    %Redundant read, future proof for config in TDMS
-	try
-		if(isvalid(wait_window))
-			waitbar(0.1, wait_window, 'Loading Sensor Configuration');
-		end
-		read_sensor_config();
-	catch ME
-		if(strcmp(ME.identifier, 'DYNAMate:NOConfigStop'));
-			throw(ME)
-		end
-	end
 	datfile = OUTPUT.SourceFileName; 
 	if(isvalid(wait_window))
 		waitbar(0.2, wait_window, ['Loading ' datfile]);
 		wait_window.UserData = sprintf('Loading %s\n', datfile);
 	end
-	TDMSStruct = TDMS_getStruct([PathName datfile],6);
-	if(~isTableCol(TDMSStruct.Properties, 'DAQVersion'))
+	TDMSStruct = TDMS_READ_FILE([PathName datfile]);
+	if(~isfield(TDMSStruct.Properties, 'DAQVersion'))
 		answer = 'No';
 		if(strcmpi('Yes', answer))
 			TDMSStruct.Properties.DAQVersion = '1.0';
@@ -293,7 +281,7 @@ global PathName OUTPUT wait_window
 		end
 	end
 	DAQVersion = TDMSStruct.Properties.DAQVersion;
-	if(~isTableCol(TDMSStruct.Properties, 'SoftwareVersion'))
+	if(~isfield(TDMSStruct.Properties, 'SoftwareVersion'))
 		SWVersion = 'N/A';
 	else
 		SWVersion = TDMSStruct.Properties.SoftwareVersion;
@@ -342,6 +330,7 @@ global PathName OUTPUT wait_window
 		SaturatedChannelsFull = [];
 		SaturatedSensors = [];
 	end	
+	OUTPUT.TDMSProperties = TDMSStruct.Properties;
 	OUTPUT.SensorConfig.SaturatedChannels = SaturatedChannels;
 	OUTPUT.SensorConfig.SaturatedChannelsFull = SaturatedChannelsFull;
 	OUTPUT.SensorConfig.SaturatedSensors = SaturatedSensors;	
@@ -376,6 +365,115 @@ global PathName OUTPUT wait_window
 		'SpectrumSmoothPower', OUTPUT.RuntimeCFG.specSmoothN, ...
 		'CorrectionSteepness', OUTPUT.RuntimeCFG.corrSteepnes));
 end
+
+function output = TDMS_READ_FILE(filename)
+global OUTPUT wait_window
+	isTableRow=@(t, thisRow) ismember(thisRow, t.Properties.RowNames);
+	index = [filename '_index']; %#ok<NASGU>
+	[TDMSData,~] = TDMS_readTDMSFile(filename);
+	
+	propN = strrep(TDMSData.propNames{1,1}, ' ', '');
+	output.Properties = cell2struct(TDMSData.propValues{1,1}(:), propN);
+	
+	S.groupIDx = TDMSData.groupIndices';
+	S.chanIDx = TDMSData.chanIndices';
+	S.chanNames = TDMSData.chanNames';
+	groups = struct2table(S, 'RowNames', TDMSData.groupNames);
+	
+	if(isTableRow(groups, 'Untitled'))
+		try
+			if(isvalid(wait_window))
+				waitbar(0.1, wait_window, 'Loading Sensor Configuration');
+			end
+			read_sensor_config();
+		catch ME
+			if(strcmp(ME.identifier, 'DYNAMate:NOConfigStop'));
+				throw(ME)
+			end
+		end
+		chanNames = TDMSData.chanNames{1}(2:end);
+		data = cell2mat(TDMSData.data(groups{'Untitled', 'chanIDx'}{:}(2:end))')';
+		t = cell2mat(TDMSData.data(groups{'Untitled', 'chanIDx'}{:}(1))')';
+	else
+		ai = read_sensor_config_new(TDMSData);
+		
+		try
+			Fs = str2double(output.Properties.SampleRate);
+		catch
+			Fs = output.Properties.SampleRate;
+		end
+		t0 = TDMSData.data{groups{'Misc', 'chanIDx'}{1}(1)}(1);
+		chanNames_active = groups{'Active','chanNames'}{1};
+		data_active = cell2mat(TDMSData.data(groups{'Active', 'chanIDx'}{:})')';
+		chanNames_inactive = groups{'Inactive','chanNames'}{1};
+		data_inactive = cell2mat(TDMSData.data(groups{'Inactive', 'chanIDx'}{:})')';
+		chanNames_misc = groups{'Misc','chanNames'}{1};
+		data_misc = cell2mat(TDMSData.data(groups{'Misc', 'chanIDx'}{:})')';
+		if(ai)
+			data = [data_active data_inactive data_misc(:,2:end)];
+			chanNames = [chanNames_active chanNames_inactive chanNames_misc(2:end)];
+		else
+			data = [data_inactive data_active data_misc(:,2:end)];
+			chanNames = [chanNames_inactive chanNames_active chanNames_misc(2:end)];
+		end
+		t = (t0:1/Fs:(length(data)-1)/Fs)';
+	end
+	output.DATA = array2table([t data], 'VariableNames', ['Time', chanNames]);
+end
+function ai = read_sensor_config_new(TDMS)
+global OUTPUT
+	S.groupIDx = TDMS.groupIndices';
+	S.chanIDx = TDMS.chanIndices';
+	S.chanNames = TDMS.chanNames';
+	groups = struct2table(S, 'RowNames', TDMS.groupNames);
+	if(strcmp('Active', questdlg('Do you want ot process Active or Inactive channels', ...
+                'Channels', 'Active', 'Inactive', 'Active')))
+		active_sensor_id = groups{'Active','chanIDx'}{1};
+		ai = 1;
+	else
+		active_sensor_id = groups{'Inactive','chanIDx'}{1};
+		ai = 0;
+	end
+	number_of_sensors = length(active_sensor_id)/3;
+	sensor_config=table();
+	for n=0:number_of_sensors-1
+		s_id = active_sensor_id(n*3+1);
+		sd = cell2struct(TDMS.propValues{s_id}',strrep(TDMS.propNames{s_id}, ' ', ''));
+		sensor_row = table(n+1, {sd.NI_ChannelName}, {'XYZ'}, {sd.Sensor_Element(1:end-2)});
+		sensor_config = [sensor_config; sensor_row]; %#ok<AGROW>
+	end
+	
+	sensor_config.Properties.VariableNames = {'Channel', 'Name', 'Components', 'SensorID'};
+	sens_file = [GetExecutableFolder() '\sensor_data.csv'];
+	sensorFreqTable = readtable(sens_file, 'ReadRowNames',true);
+	sensorFreqTable.Properties.RowNames = strrep(sensorFreqTable.Properties.RowNames,' ','_');
+	sensorFreq = array2table(4.425 * ...
+		ones(length(sensor_config.SensorID),3));
+	sensorFreq.Properties.VariableNames = ...
+		sensorFreqTable.Properties.VariableNames;	
+	for sid = 1:1:length(sensor_config.SensorID)
+		if(strcmp(sensor_config.SensorID(sid), 'NA') || ...
+				strcmp(sensor_config.SensorID(sid), 'S02 0'))
+			continue;
+		else
+			sensorFreq(sid,:) = sensorFreqTable(...
+				cellstr(strrep(sensor_config.SensorID(sid),' ','_')),:);
+		end
+	end
+    sensor_names = sensor_config.Name;
+    names = cellfun(@(c) strcat(c, {'_X';'_Y';'_Z'}), ...
+        sensor_names, 'uni', 0);
+    names = vertcat(names{:})';
+    sensor_config = [sensor_config sensorFreq];
+    freq_vector = reshape(table2array(sensorFreq)',1, numel(sensorFreq));
+	OUTPUT.Tables.SensorConfig = sensor_config;
+	OUTPUT.SensorConfig.Nsensors = number_of_sensors;
+    OUTPUT.SensorConfig.ChannelNames = names;
+    OUTPUT.SensorConfig.SensorNames = sensor_names;
+    OUTPUT.SensorConfig.SensorID = sensor_config.SensorID;
+    OUTPUT.SensorConfig.DataChannels = 1:3*number_of_sensors;
+    OUTPUT.SensorConfig.SensorFreqs = freq_vector;
+end
 function read_sensor_config()
 global PathName OUTPUT
     isTableCol=@(t, thisCol) ismember(thisCol, t.Properties.VariableNames);
@@ -398,12 +496,14 @@ global PathName OUTPUT
 		end
 		%trim table if too large
 		sensor_config = sensor_config(1:min(height(sensor_config),8),:);
+		sensor_config.SensorID = strrep(sensor_config.SensorID, ' ', '_');
 		active_ids = find(~strcmp(sensor_config.Name,'NA'))';
 		sensor_config = sensor_config(active_ids,:);
 		number_of_sensors = length(active_ids);
 		if(isTableCol(sensor_config, 'SensorID'))
 			sens_file = [GetExecutableFolder() '\sensor_data.csv'];
 			sensorFreqTable = readtable(sens_file, 'ReadRowNames',true);
+			sensorFreqTable.Properties.RowNames = strrep(sensorFreqTable.Properties.RowNames,' ','_');
 			sensorFreq = array2table(4.5 * ...
 				ones(length(sensor_config.SensorID),3));
 			sensorFreq.Properties.VariableNames = ...
@@ -508,7 +608,15 @@ global OUTPUT wait_window
 	sat_channels = OUTPUT.SensorConfig.SaturatedChannels;
 	sat_channelsFull = OUTPUT.SensorConfig.SaturatedChannelsFull;
 % 	data = ShiftFilter(data, 32, 75, 1000);
-	if(strcmp('Yes', choosefixDialog(targetFc)))
+	if(isfield(OUTPUT.TDMSProperties,'ResponseExtension'))
+		tmp_bool = strcmp(OUTPUT.TDMSProperties.ResponseExtension,'NO');
+		if(~tmp_bool)
+			OUTPUT.Tables.TestConfig.SensorFc = 1;
+		end
+	else
+		tmp_bool = true;
+	end
+	if(tmp_bool && strcmp('Yes', choosefixDialog(targetFc)))
 		if(sat_channels)
 			msg = strjoin([{'For File:'} {OUTPUT.SourceFileName} ...
 				{'Possible Saturation Detected on these Channels:'} ...
