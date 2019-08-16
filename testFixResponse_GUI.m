@@ -1,7 +1,7 @@
 function testFixResponse_GUI()
 global HT sensor_filter
 	fig1 = figure(777);clf
-	fig2 = figure(666);clf
+	fig2 = figure(888);clf
 	start_position = [10 10];
     next_size = [100 35];
 	new_freq = uicontrol('Style','edit', 'Parent', fig1, ...
@@ -28,27 +28,30 @@ global HT sensor_filter
 	
 	s=tf('s');
 	Fs = 1000;
-	Tend = 2^18/Fs;
+	Tend = 2^16/Fs;
 	t = (0:1/Fs:Tend-1/Fs)';
 	N = length(t);
 	f = (Fs*(0:(N/2))/N)';
 	
 	%Sample Data
-	ftest = logspace(-0.5, 1.7, 10);%[1 2 5 10];%
-% 	ftest = [64 128 256 512 1028 2048 4096]./Tend;
-	[T, FT] = meshgrid(t, ftest);
-	data_in = sum(sin(2*pi.*T.*FT))+0.5*randn(1,N);
+	ftest = logspace(0, 1.7, 10);%[1 2 5 10];%
+% 	ftest = [64 128 256 512 1028 2048 4096]'./Tend;
+% 	ftest = [1];
+	[FT, T] = meshgrid(ftest, t);
+	data_in = sum(sin(2*pi.*T.*FT),2)+0.5*randn(N,1);
 % 	data_in = detrend(data_in);%.*build_taper(t, 1)';
 % 	data_in = data_in-mean(data_in);
 % 	[num, den] = butter(8, 0.5);
 % 	data_in = filter(num,den,data_in);
 % 	data_in = 10*data_in/(3*std(data_in));
-	ld=load('sampleDataResponseFix2');
-	data_in = ld(1).tmp.D;
-	t = ld(1).tmp.t;
-	Fs = 1/(t(2)-t(1));	
-	N = length(t);
-	f = (Fs*(0:(N/2))/N)';
+
+% 	ld=load('sampleDataResponseFix2');
+% 	data_in = ld(1).tmp.D;
+% 	t = ld(1).tmp.t;
+% 	Fs = 1/(t(2)-t(1));	
+% 	N = length(t);
+% 	f = (Fs*(0:(N/2))/N)';
+	
 	fft_start = fft(data_in);
 % 	fft_in = abs(fft_in)/N;
 	fft_start = fft_start(1:N/2+1)/N;
@@ -84,10 +87,11 @@ global HT sensor_filter
 	end
 	
 % 	Sensor_Response = s/(w1+s);
-% 	data(data>10) = 10;
-% 	data(data<-10) = -10;
+% 	data(data>0.15) = 0.15;
+% 	data(data<-0.15) = -0.15;
 % 	data = detrend(data);
 % 	
+% 	data = 2*square(t);
 	fft_in_tmp = fft(data);%.*build_taper(t, 1)');
 % 	fft_in = abs(fft_in_tmp)/N;
 	fft_in = fft(data);
@@ -219,7 +223,7 @@ global HT sensor_filter
 		axis(t31, [0.1 100 -1000 400])
 		xlim(t35, [0.1 100])
 		xlim(t25, [0.1 100])
-		alldata = [data_in' data' out_data' out_data2'];
+		alldata = [data_in data out_data out_data2];
 		disp(mean(alldata))
 		disp(std(alldata))
 	end
