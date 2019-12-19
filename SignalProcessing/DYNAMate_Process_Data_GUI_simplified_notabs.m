@@ -286,10 +286,13 @@ global PathName OUTPUT wait_window
 	else
 		SWVersion = TDMSStruct.Properties.SoftwareVersion;
 	end
-	oldDAQ = strcmp(DAQVersion, '1.0');
+	oldDAQ = strcmp(DAQVersion, '1.0')||strcmp(DAQVersion, 'N/A');
 	%extract data from data file
 	Dtable = TDMSStruct.DATA;%(1000:34001,:);
 	Fs = 1/(Dtable{2,1}-Dtable{1,1});
+	if(Fs<=0)
+		Fs = 250;
+	end
 	duration = round(Dtable{end,1}-Dtable{1,1}+1/Fs);
 	DATA = Dtable{:,[1 OUTPUT.SensorConfig.DataChannels + 1]};
 	CONFIG = Dtable{:,26:end};
@@ -302,7 +305,9 @@ global PathName OUTPUT wait_window
 	SCALES_str2 = {'Calibration', '100mm/s', '10mm/s', ...
 		'1mm/s', '0.1mm/s', '0.01mm/s'};
 	scale_selected = round(mean(CONFIG(:,end)));
+% 	scale_selected = 0;
 	filter_selected = round(mean(CONFIG(:,end-1)))-1;
+	filter_selected = 1;
 	if(oldDAQ)
 		scale_selected = scale_selected + 1;
 		SCALE_str = SCALES_str1{scale_selected};

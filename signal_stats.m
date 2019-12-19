@@ -1,6 +1,9 @@
 function Stats = signal_stats(D, names)
     data = D(:,2:end);
     t=D(:,1);Fs = 1/(t(2)-t(1));
+	if(Fs<=0)
+		Fs = 250;
+	end
     
     filter_cutoff = 10;
     [fnum, fden] = butter(4, filter_cutoff*2/Fs, 'low');

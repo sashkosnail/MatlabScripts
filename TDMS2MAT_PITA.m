@@ -39,15 +39,16 @@ for idx = 1:1:length(FileName)
     datfile = datfile(1:strfind(datfile,'.')-1);
     t = D{:,1};
     data = D{:,(sensor_offset*3+1)+(1:number_of_sensors*3)};
+% 	data = D{:, 1+[1:6, 22:24]};
     config = D{:,26:end};
     %Extract confguration information
     FILTERS = [32,64,128];
     SCALES_STR = {'0.1mm/s', 'Calibration', '100mm/s', '10mm/s', '1mm/s'};
     SCALE_MULT = [0.01, 10, 10, 1, 0.1];
-    scale_selected = ceil(mean(config(:,end))+0.5);
-    filt_selected = FILTERS(ceil(mean(config(:,end-1))-1));
-    disp(['Filter Selected: ', num2str(filt_selected), ...
-        'Hz || Scale Selected: ', SCALES_STR{scale_selected}])
+%     scale_selected = ceil(mean(config(:,end))+0.5);
+%     filt_selected = FILTERS(ceil(mean(config(:,end-1))-1));
+%     disp(['Filter Selected: ', num2str(filt_selected), ...
+%         'Hz || Scale Selected: ', SCALES_STR{scale_selected}])
 
     %L4 Reorder and scale
 %     if(test_num == 11|| test_num == 20)
@@ -68,10 +69,10 @@ for idx = 1:1:length(FileName)
     data = (data-ones(length(data),1)*mean(data))*SCALE_MULT(scale_selected);
 	D = [t data];
    
-    [fig, STATS] = plot_sensor_data(D, datfile);
+    fig = plot_sensor_data(D, datfile, repmat({'x','y','z'},number_of_sensors,1), 123);
     
     save_data = 'Y'; %#ok<NASGU>
-%     save_data = input('Save Data Y/N [N]:','s');
+    save_data = input('Save Data Y/N [N]:','s');
     if isempty(save_data)
         save_data = 'Y'  %#ok<NOPTS>
     end
@@ -80,7 +81,7 @@ for idx = 1:1:length(FileName)
         csv_file = [PathName datfile '.csv'];
         png_file = [PathName datfile '.png'];
         
-        save(mat_file, 'D', 'STATS');
+        save(mat_file, 'D');
         dlmwrite(csv_file, D);
         export_fig(png_file, '-c[0 0 0 0]', fig);
     end
