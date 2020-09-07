@@ -2,7 +2,7 @@
 function DYNAMate_Process_Data_GUI_simplified_notabs(varargin)
 clearvars -global OUTPUT
 global OUTPUT PathName
-	OUTPUT.DMPversion = 'v1.91';  
+	OUTPUT.DMPversion = 'v1.95';  
     %load config files
     cfg_file = [GetExecutableFolder() '\DYNAMate.cfg'];
 	fileattrib(cfg_file, '+w');
@@ -272,21 +272,21 @@ global PathName OUTPUT wait_window
 		wait_window.UserData = sprintf('Loading %s\n', datfile);
 	end
 	TDMSStruct = TDMS_READ_FILE([PathName datfile]);
-	if(~isfield(TDMSStruct.Properties, 'DAQVersion'))
+	if(~isfield(TDMSStruct.Properties, 'Version_DAQ'))
 		answer = 'No';
 		if(strcmpi('Yes', answer))
-			TDMSStruct.Properties.DAQVersion = '1.0';
+			TDMSStruct.Properties.Version_DAQ = '1.0';
 		else
-			TDMSStruct.Properties.DAQVersion = 'N/A';
+			TDMSStruct.Properties.Version_DAQ = 'N/A';
 		end
 	end
-	DAQVersion = TDMSStruct.Properties.DAQVersion;
-	if(~isfield(TDMSStruct.Properties, 'SoftwareVersion'))
-		SWVersion = 'N/A';
+	Version_DAQ = TDMSStruct.Properties.Version_DAQ;
+	if(~isfield(TDMSStruct.Properties, 'Version_DynaMate'))
+		Version_DynaMate = 'N/A';
 	else
-		SWVersion = TDMSStruct.Properties.SoftwareVersion;
+		Version_DynaMate = TDMSStruct.Properties.SoftwareVersion;
 	end
-	oldDAQ = strcmp(DAQVersion, '1.0')||strcmp(DAQVersion, 'N/A');
+	oldDAQ = strcmp(Version_DAQ, '1.0')||strcmp(Version_DAQ, 'N/A');
 	%extract data from data file
 	Dtable = TDMSStruct.DATA;%(1000:34001,:);
 	Fs = 1/(Dtable{2,1}-Dtable{1,1});
@@ -339,8 +339,8 @@ global PathName OUTPUT wait_window
 	OUTPUT.SensorConfig.SaturatedChannels = SaturatedChannels;
 	OUTPUT.SensorConfig.SaturatedChannelsFull = SaturatedChannelsFull;
 	OUTPUT.SensorConfig.SaturatedSensors = SaturatedSensors;	
-	OUTPUT.SW_version = SWVersion;
-	OUTPUT.DAQ_version = DAQVersion;	
+	OUTPUT.SW_version = Version_DynaMate;
+	OUTPUT.DAQ_version = Version_DAQ;	
 	OUTPUT.Data.Fs = Fs;
 	OUTPUT.Data.SignalDuration = duration;
 	OUTPUT.Data.SignalNSamples = length(DATA);	
@@ -360,7 +360,7 @@ global PathName OUTPUT wait_window
 	OUTPUT.Data.FreqDomain.Displacement = [];	
 	OUTPUT.Tables.TestConfig = struct2table(struct(...
 		'FileName', datfile, 'DMPversion', OUTPUT.DMPversion, ...
-		'DAQVersion', DAQVersion, 'SWVersion', SWVersion, 'Fs', Fs, ...
+		'Version_DAQ', Version_DAQ, 'SWVersion', Version_DynaMate, 'Fs', Fs, ...
 		'NSamples', length(DATA), 'SignalDuration', duration, ...
 		'NumberOfSensors', OUTPUT.SensorConfig.Nsensors, ...
 		'AcquisitionFilter', FILTERS_str(filter_selected), ...
@@ -407,7 +407,7 @@ global OUTPUT wait_window
 		catch
 			Fs = output.Properties.SampleRate;
 		end
-		t0 = TDMSData.data{groups{'Misc', 'chanIDx'}{1}(1)}(1);
+% 		t0 = TDMSData.data{groups{'Misc', 'chanIDx'}{1}(1)}(1);
 		chanNames_active = groups{'Active','chanNames'}{1};
 		data_active = cell2mat(TDMSData.data(groups{'Active', 'chanIDx'}{:})')';
 		chanNames_inactive = groups{'Inactive','chanNames'}{1};
@@ -421,7 +421,7 @@ global OUTPUT wait_window
 			data = [data_inactive data_active data_misc(:,2:end)];
 			chanNames = [chanNames_inactive chanNames_active chanNames_misc(2:end)];
 		end
-		t = (t0:1/Fs:(length(data)-1)/Fs)';
+		t = TDMSData.data{groups{'Misc', 'chanIDx'}{1}(1)}';
 	end
 	output.DATA = array2table([t data], 'VariableNames', ['Time', chanNames]);
 end
@@ -461,8 +461,13 @@ global OUTPUT
 				strcmp(sensor_config.SensorID(sid), 'S02 0'))
 			continue;
 		else
-			sensorFreq(sid,:) = sensorFreqTable(...
-				cellstr(strrep(sensor_config.SensorID(sid),' ','_')),:);
+			try
+				sensorFreq(sid,:) = sensorFreqTable(...
+					cellstr(strrep(sensor_config.SensorID(sid),' ','_')),:);
+			catch
+				sensorFreq(sid,:) = sensorFreqTable(strcat('S01_', ...
+					sensor_config.SensorID(sid)),:);
+			end
 		end
 	end
     sensor_names = sensor_config.Name;
@@ -606,10 +611,11 @@ global OUTPUT wait_window
     %Apply taper
     taper = build_taper(t, taper_tau);
     taper = repmat(taper, 1, numCH);
-	data = detrend(data);
-    data = (data - repmat(mean(data),N,1)).*taper;
-    offset = repmat(mean(data),N,1);
-    data = data - offset;
+% 	data = detrend(data);
+%!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!%
+    data = (data - repmat(mean(data),N,1));%.*taper;
+%     offset = repmat(mean(data),N,1);
+%     data = data - offset;
 	sat_channels = OUTPUT.SensorConfig.SaturatedChannels;
 	sat_channelsFull = OUTPUT.SensorConfig.SaturatedChannelsFull;
 % 	data = ShiftFilter(data, 32, 75, 1000);

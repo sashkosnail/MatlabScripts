@@ -1,5 +1,14 @@
 function CalculatePatkaGUI()
 	global FilterCoeffs FilterParams
+	
+	targetFc = 0.5;
+	targetD = 0.707;
+	hpFc = 0.3;
+	hpD = 0.45;
+	
+	loadfile = 'sensor_calibration_Hesham.csv';
+	savefile = 'patka_coeffs_4.65';
+	
 	FilterCoeffs = [];
 	FilterParams = [];
 	fig1 = figure(777);clf
@@ -9,22 +18,22 @@ function CalculatePatkaGUI()
 	new_freq = uicontrol('Style','edit', 'Parent', fig1, ...
 		'Units', 'pixels', 'Position', [start_position next_size], ...
 		'Callback', @value_change, 'UserData', 1, ...
-		'String', num2str(0.85));
+		'String', num2str(targetFc));
 	start_position(1) = start_position(1) + next_size(1) + 50;
 	new_damping = uicontrol('Style','edit', 'Parent', fig1, ...
 		'Units', 'pixels', 'Position', [start_position next_size], ...
 		'Callback', @value_change, 'UserData', 1, ...
-		'String', num2str(0.707));
+		'String', num2str(targetD));
 	start_position(1) = start_position(1) + next_size(1) + 50;
 	HPeF = uicontrol('Style','edit', 'Parent', fig1, ...
 		'Units', 'pixels', 'Position', [start_position next_size], ...
 		'Callback', @value_change, 'UserData', 1, ...
-		'String', num2str(0.5));
+		'String', num2str(hpFc));
 	start_position(1) = start_position(1) + next_size(1) + 50;
 	HPeD = uicontrol('Style','edit', 'Parent', fig1, ...
 		'Units', 'pixels', 'Position', [start_position next_size], ...
 		'Callback', @value_change, 'UserData', 1, ...
-		'String', num2str(0.4));
+		'String', num2str(hpD));
 	next_size = [100 40];
 	start_position(1) = start_position(1) + next_size(1) + 50;
 	next_button = uicontrol('Parent', fig1, 'Style', 'pushbutton', ...
@@ -55,18 +64,21 @@ function CalculatePatkaGUI()
 	ax1 = axes('Parent', fig1);
 	
 	s=tf('s');
-	Fs = 1000;
+	Fs = 400;
 	Tend = 200;
 	t = 0:1/Fs:Tend-1/Fs;
 	N = length(t);
 	f = Fs*(0:(N/2))/N;
 	
 	%sensor data
-	tmp=readtable('sensor_calibration_MAEEN.csv');
+	tmp=readtable(loadfile);
 	sensor_data = tmp;
 	sensor_data(1:3:end,:) = tmp(3:3:end,:);
 	sensor_data(3:3:end,:) = tmp(1:3:end,:);
 	sensor_id = 0;
+	
+	sensor_data = table({'o'}, {'generic'}, 350, 4.65, 0.3);
+
 	
 	H_inv = []; HT = [];
 	Sensor_Response = [];
@@ -132,7 +144,7 @@ function CalculatePatkaGUI()
 		value_change;
 	end
 	function saveresults(~, ~)
-		dlmwrite('patka_coeffs_all_filt.csv',FilterCoeffs,'precision','%10.20f')
+		dlmwrite(strcat(savefile,'.csv'),FilterCoeffs,'precision','%10.20f')
 		save('patka.mat', 'FilterCoeffs', 'FilterParams');
 	end
 	function gotonext(~, ~)
@@ -142,11 +154,11 @@ function CalculatePatkaGUI()
 		new_FilterParams = [sensor_data{sensor_id,4}, 0.707, ...
 			HPslF.Value, HPslD.Value, target_freq, target_d];
 		FilterParams = [FilterParams; new_FilterParams];
-		sensor_id = sensor_id + 1;
-		if(sensor_id>height(sensor_data))
-			disp('Done')
-			return
-		end
+% 		sensor_id = sensor_id + 1;
+% 		if(sensor_id>height(sensor_data))
+% 			disp('Done')
+% 			return
+% 		end
 		next_sensor;
 	end
 	function value_change(~, ~)

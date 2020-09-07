@@ -310,11 +310,11 @@ function testFixResponse_GUI()%#ok<*NASGU>
 			llp = legend(axsP, 'IRC Phase', 'IRC Group Delay');
 			set(llm, 'FontSize', 12, 'TextColor', 'black');
 			
-			xlim(axsP, [0.1 50]);
-			xlim(axsM, [0.1 50]);
+			xlim(axsP, [0.01 50]);
+			xlim(axsM, [0.01 50]);
 			
 % 			ylim(axsP, [-360 180]);
-			ylim(axsM, [-60 60]);
+			ylim(axsM, [-80 80]);
 			
 			x = xlabel(axsP, 'Frequency [Hz]', 'FontSize', 12, ...
 				'FontWeight', 'bold');
