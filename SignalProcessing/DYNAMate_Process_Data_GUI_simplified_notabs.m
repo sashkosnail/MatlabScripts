@@ -17,6 +17,7 @@ global OUTPUT PathName
     OUTPUT.RuntimeCFG = [array2table(tmp2(~isnan(tmp2)), ...
         'VariableNames', tmp.Properties.VariableNames(~isnan(tmp2))) ...
         tmp(:,isnan(tmp2))];
+    %trick to hide extention parameter
     if(~isTableCol(OUTPUT.RuntimeCFG, 'EnableFc'))
         OUTPUT.RuntimeCFG.targetFc = 0.5;
     end
@@ -272,21 +273,21 @@ global PathName OUTPUT wait_window
 		wait_window.UserData = sprintf('Loading %s\n', datfile);
 	end
 	TDMSStruct = TDMS_READ_FILE([PathName datfile]);
-	if(~isfield(TDMSStruct.Properties, 'Version_DAQ'))
+	if(~isfield(TDMSStruct.Properties, 'VersionDAQ'))
 		answer = 'No';
 		if(strcmpi('Yes', answer))
-			TDMSStruct.Properties.Version_DAQ = '1.0';
+			TDMSStruct.Properties.VersionDAQ = '1.0';
 		else
-			TDMSStruct.Properties.Version_DAQ = 'N/A';
+			TDMSStruct.Properties.VersionDAQ = 'N/A';
 		end
 	end
-	Version_DAQ = TDMSStruct.Properties.Version_DAQ;
-	if(~isfield(TDMSStruct.Properties, 'Version_DynaMate'))
-		Version_DynaMate = 'N/A';
+	VersionDAQ = TDMSStruct.Properties.VersionDAQ;
+	if(~isfield(TDMSStruct.Properties, 'VersionDynaMate'))
+		VersionDynaMate = 'N/A';
 	else
-		Version_DynaMate = TDMSStruct.Properties.SoftwareVersion;
+		VersionDynaMate = TDMSStruct.Properties.SoftwareVersion;
 	end
-	oldDAQ = strcmp(Version_DAQ, '1.0')||strcmp(Version_DAQ, 'N/A');
+	oldDAQ = strcmp(VersionDAQ, '1.0')||strcmp(VersionDAQ, 'N/A');
 	%extract data from data file
 	Dtable = TDMSStruct.DATA;%(1000:34001,:);
 	Fs = 1/(Dtable{2,1}-Dtable{1,1});
@@ -339,8 +340,8 @@ global PathName OUTPUT wait_window
 	OUTPUT.SensorConfig.SaturatedChannels = SaturatedChannels;
 	OUTPUT.SensorConfig.SaturatedChannelsFull = SaturatedChannelsFull;
 	OUTPUT.SensorConfig.SaturatedSensors = SaturatedSensors;	
-	OUTPUT.SW_version = Version_DynaMate;
-	OUTPUT.DAQ_version = Version_DAQ;	
+	OUTPUT.SW_version = VersionDynaMate;
+	OUTPUT.DAQ_version = VersionDAQ;	
 	OUTPUT.Data.Fs = Fs;
 	OUTPUT.Data.SignalDuration = duration;
 	OUTPUT.Data.SignalNSamples = length(DATA);	
@@ -360,7 +361,7 @@ global PathName OUTPUT wait_window
 	OUTPUT.Data.FreqDomain.Displacement = [];	
 	OUTPUT.Tables.TestConfig = struct2table(struct(...
 		'FileName', datfile, 'DMPversion', OUTPUT.DMPversion, ...
-		'Version_DAQ', Version_DAQ, 'SWVersion', Version_DynaMate, 'Fs', Fs, ...
+		'VersionDAQ', VersionDAQ, 'SWVersion', VersionDynaMate, 'Fs', Fs, ...
 		'NSamples', length(DATA), 'SignalDuration', duration, ...
 		'NumberOfSensors', OUTPUT.SensorConfig.Nsensors, ...
 		'AcquisitionFilter', FILTERS_str(filter_selected), ...
@@ -370,7 +371,6 @@ global PathName OUTPUT wait_window
 		'SpectrumSmoothPower', OUTPUT.RuntimeCFG.specSmoothN, ...
 		'CorrectionSteepness', OUTPUT.RuntimeCFG.corrSteepnes));
 end
-
 function output = TDMS_READ_FILE(filename)
 global OUTPUT wait_window
 	isTableRow=@(t, thisRow) ismember(thisRow, t.Properties.RowNames);
