@@ -285,12 +285,12 @@ global PathName OUTPUT wait_window
 	if(~isfield(TDMSStruct.Properties, 'VersionDynaMate'))
 		VersionDynaMate = 'N/A';
 	else
-		VersionDynaMate = TDMSStruct.Properties.SoftwareVersion;
+		VersionDynaMate = TDMSStruct.Properties.VersionDynaMate;
 	end
 	oldDAQ = strcmp(VersionDAQ, '1.0')||strcmp(VersionDAQ, 'N/A');
 	%extract data from data file
 	Dtable = TDMSStruct.DATA;%(1000:34001,:);
-	Fs = 1/(Dtable{2,1}-Dtable{1,1});
+	Fs = str2double(TDMSStruct.Properties.SampleRate);%1/(Dtable{2,1}-Dtable{1,1});
 	if(Fs<=0)
 		Fs = 250;
 	end
@@ -308,7 +308,6 @@ global PathName OUTPUT wait_window
 	scale_selected = round(mean(CONFIG(:,end)));
 % 	scale_selected = 0;
 	filter_selected = round(mean(CONFIG(:,end-1)))-1;
-	filter_selected = 1;
 	if(oldDAQ)
 		scale_selected = scale_selected + 1;
 		SCALE_str = SCALES_str1{scale_selected};
@@ -597,7 +596,7 @@ global OUTPUT wait_window
     targetFc = OUTPUT.RuntimeCFG.targetFc;
     corrSteepnes = OUTPUT.RuntimeCFG.corrSteepnes;
     data = OUTPUT.Data.RAW;
-    t = OUTPUT.Data.Time;
+    t = (OUTPUT.Data.Time(1):Ts: OUTPUT.Data.Time(end))';
 	numCH = size(data,2);
 	if(~mod(OUTPUT.Data.SignalNSamples, 2))
 		t = [t; t(end)+Ts];
@@ -611,7 +610,7 @@ global OUTPUT wait_window
     %Apply taper
     taper = build_taper(t, taper_tau);
     taper = repmat(taper, 1, numCH);
-% 	data = detrend(data);
+	data = detrend(data);
 %!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!%
     data = (data - repmat(mean(data),N,1));%.*taper;
 %     offset = repmat(mean(data),N,1);
