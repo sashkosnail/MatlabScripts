@@ -2,7 +2,7 @@
 function DYNAMate_Process_Data_GUI_simplified_notabs(varargin)
 clearvars -global OUTPUT
 global OUTPUT PathName
-	OUTPUT.DMPversion = 'v1.95';  
+	OUTPUT.DMPversion = 'v1.99';  
     %load config files
     cfg_file = [GetExecutableFolder() '\DYNAMate.cfg'];
 	fileattrib(cfg_file, '+w');
