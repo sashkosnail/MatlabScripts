@@ -444,7 +444,11 @@ global OUTPUT
 	for n=0:number_of_sensors-1
 		s_id = active_sensor_id(n*3+1);
 		sd = cell2struct(TDMS.propValues{s_id}',strrep(TDMS.propNames{s_id}, ' ', ''));
-		sensor_row = table(n+1, {sd.NI_ChannelName}, {'XYZ'}, {sd.Sensor_Element(1:end-2)});
+		if(isprop(sd, 'Sensor_Element'))
+			sensor_row = table(n+1, {sd.NI_ChannelName}, {'XYZ'}, {sd.Sensor_Element(1:end-2)});
+		else
+			sensor_row = table(n+1, {sd.NI_ChannelName}, {'XYZ'}, {num2str(n+1)});
+		end
 		sensor_config = [sensor_config; sensor_row]; %#ok<AGROW>
 	end
 	
